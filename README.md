@@ -29,13 +29,41 @@ bun test
 
 ## Create an age key
 
-SecureBackup uses the `age-encryption` package. Generate an identity and recipient like this:
+Generate a keypair once:
 
 ```bash
-bun -e 'import * as age from "age-encryption"; const id = await age.generateIdentity(); console.log("identity=", id); console.log("recipient=", await age.identityToRecipient(id))'
+./dist/securebackup keygen
 ```
 
-Keep the identity private. Use the recipient when encrypting.
+SecureBackup writes the files here:
+
+```text
+~/.securebackup/
+  identity.txt
+  recipient.txt
+```
+
+`identity.txt` is the private key. Keep it private. `recipient.txt` is safe to use for encryption commands.
+
+Example:
+
+```bash
+RECIPIENT=$(cat ~/.securebackup/recipient.txt)
+./dist/securebackup encrypt ./secret.txt \
+  --recipient "$RECIPIENT" \
+  --output ./secret.txt.age
+```
+
+For decrypt commands, pass the private key value from `identity.txt`:
+
+```bash
+IDENTITY=$(cat ~/.securebackup/identity.txt)
+./dist/securebackup decrypt ./secret.txt.age \
+  --identity "$IDENTITY" \
+  --output ./secret.txt
+```
+
+Keep the identity file out of git, screenshots, logs, pastebins, and any group chat where optimism goes to die.
 
 ## Encrypt one file
 
@@ -160,6 +188,7 @@ Implemented:
 
 - Bun CLI
 - standalone binary build
+- key generation with `securebackup keygen`
 - `age-encryption` recipient mode
 - direct `encrypt` and `decrypt`
 - direct encrypted chunk split with `encrypt --out-dir`

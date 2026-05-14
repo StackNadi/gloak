@@ -5,12 +5,14 @@ import { verifyBackup } from "./commands/verify"
 import { listBackups } from "./commands/list"
 import { encryptDirect } from "./commands/encrypt"
 import { decryptDirect } from "./commands/decrypt"
+import { generateKeypair } from "./commands/keygen"
 import { parseSize } from "./core/paths"
 
 function usage(): string {
   return `securebackup — Bun CLI for age-encrypted chunked backups
 
 Usage:
+  securebackup keygen
   securebackup upload <file> --recipient <age1...> --to local:/path [--chunk-size 20MB]
   securebackup restore <backup_id> --from local:/path --identity <AGE-SECRET-KEY...> --output <file-or-dir>
   securebackup encrypt <file> --recipient <age1...> --output <file.age>
@@ -40,6 +42,12 @@ async function main(): Promise<void> {
   const { command, positional, flags } = parseArgs(Bun.argv.slice(2))
   if (!command || command === "help" || command === "--help" || command === "-h") {
     console.log(usage())
+    return
+  }
+
+  if (command === "keygen") {
+    const result = await generateKeypair()
+    console.log(`Keypair generated.\n\nRecipient:\n${result.recipient}\n\nIdentity file:\n${result.identityFile}\n\nRecipient file:\n${result.recipientFile}`)
     return
   }
 
