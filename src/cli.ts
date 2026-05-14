@@ -10,7 +10,7 @@ import { resolveRecipient, resolveIdentity } from "./core/resolver"
 import { parseSize } from "./core/paths"
 
 function usage(): string {
-  return `securebackup — Bun CLI for age-encrypted chunked backups
+  return `securebackup: age-encrypted backup tool
 
 Usage:
   securebackup keygen                    [-o, --output <dir>]
@@ -23,12 +23,11 @@ Usage:
   securebackup verify <backup-id>        --from <storage>
   securebackup list                      --from <storage>
 
--i, --identity <file>     Identity (private key) file  (default: ~/.securebackup/identity.txt)
--r, --recipient <file>    Recipient (public key) file  (default: ~/.securebackup/recipient.txt)
--o, --output <dir>        Output directory for keygen  (default: ~/.securebackup)
+-i, --identity <file>     Identity (private key) file   (default: ~/.securebackup/identity.txt)
+-r, --recipient <file>    Recipient (public key) file   (default: ~/.securebackup/recipient.txt)
+-o, --output <dir>        Output directory for keygen   (default: ~/.securebackup)
 
-Run "securebackup keygen" first to set up keys. After that, -i and -r are
-optional — SecureBackup reads from ~/.securebackup automatically.`
+After "keygen", -i and -r are optional. SecureBackup uses ~/.securebackup/ by default.`
 }
 
 type Args = { command?: string; positional?: string; flags: Record<string, string> }
