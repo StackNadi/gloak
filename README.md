@@ -35,17 +35,25 @@ Generate a keypair once:
 ./dist/securebackup keygen
 ```
 
-SecureBackup writes the files here:
+By default the keys go to `~/.securebackup/`. To use a custom directory:
+
+```bash
+./dist/securebackup keygen --output /path/to/keys
+# or
+./dist/securebackup keygen -o /path/to/keys
+```
+
+SecureBackup writes these files:
 
 ```text
 ~/.securebackup/
-  identity.txt
-  recipient.txt
+  identity.txt      (private key — keep this secret)
+  recipient.txt     (public key — safe to share)
 ```
 
 >`identity.txt` is the private key. Keep it private. `recipient.txt` is safe to use for encryption commands.
 
-After you run `keygen` once, `--recipient` and `--identity` are optional. SecureBackup reads the key files from `~/.securebackup/` automatically when you skip those flags.
+After you run `keygen` once, `-i` and `-r` are optional. SecureBackup reads the key files from `~/.securebackup/` automatically when you skip those flags.
 
 Encrypt:
 
@@ -59,7 +67,15 @@ Decrypt:
 ./dist/securebackup decrypt ./secret.txt.age --output ./secret.txt
 ```
 
-You can still pass `--recipient` or `--identity` explicitly if you want to use a different key or override the default. The saved files are only a fallback.
+You can still pass `-r <file>` or `-i <file>` to override with a different key file (like SSH's `-i` flag). The saved files are only a fallback.
+
+```bash
+# use a different recipient file
+./dist/securebackup encrypt ./secret.txt -r /path/to/other-recipient.txt --output ./secret.txt.age
+
+# use a different identity file
+./dist/securebackup decrypt ./secret.txt.age -i /path/to/other-identity.txt --output ./secret.txt
+```
 
 Keep the identity file out of git, screenshots, logs, pastebins, and any group chat where optimism goes to die.
 
@@ -77,7 +93,7 @@ You can still override the recipient:
 
 ```bash
 ./dist/securebackup encrypt ./secret.txt \
-  --recipient age1... \
+  -r /path/to/recipient.txt \
   --output ./secret.txt.age
 ```
 
@@ -87,11 +103,11 @@ Decrypt it later:
 ./dist/securebackup decrypt ./secret.txt.age --output ./secret.txt
 ```
 
-Or with an explicit key:
+Or with an explicit identity file:
 
 ```bash
 ./dist/securebackup decrypt ./secret.txt.age \
-  --identity AGE-SECRET-KEY-... \
+  -i /path/to/identity.txt \
   --output ./secret.txt
 ```
 
@@ -114,7 +130,7 @@ Or with an explicit recipient:
 
 ```bash
 ./dist/securebackup encrypt ./video.tar \
-  --recipient age1... \
+  -r /path/to/recipient.txt \
   --out-dir ./video-encrypted-chunks \
   --chunk-size 20MB
 ```
@@ -132,7 +148,7 @@ Decrypt those chunks back into one file:
 ```bash
 ./dist/securebackup decrypt \
   --chunks-dir ./video-encrypted-chunks \
-  --identity AGE-SECRET-KEY-... \
+  -i /path/to/identity.txt \
   --output ./video.tar
 ```
 
@@ -154,7 +170,7 @@ Or with an explicit recipient:
 
 ```bash
 ./dist/securebackup upload ./backup.tar \
-  --recipient age1... \
+  -r /path/to/recipient.txt \
   --to local:/mnt/backups
 ```
 
@@ -205,12 +221,12 @@ If you ran `keygen`:
   --output ./restored/
 ```
 
-Or with an explicit identity:
+Or with an explicit identity file:
 
 ```bash
 ./dist/securebackup restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
   --from local:/mnt/backups \
-  --identity AGE-SECRET-KEY-... \
+  -i /path/to/identity.txt \
   --output ./restored/
 ```
 
@@ -228,8 +244,9 @@ Implemented:
 
 - Bun CLI
 - standalone binary build
-- key generation with `securebackup keygen`
+- key generation with `securebackup keygen` (custom `--output` / `-o`)
 - auto key resolution from `~/.securebackup/`
+- SSH-style `-i <file>` and `-r <file>` flag overrides
 - `age-encryption` recipient mode
 - direct `encrypt` and `decrypt`
 - direct encrypted chunk split with `encrypt --out-dir`

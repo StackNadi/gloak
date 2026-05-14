@@ -1,16 +1,43 @@
 import { describe, expect, test } from "bun:test"
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { tmpdir } from "node:os"
-import { resolveRecipient, resolveIdentity, securebackupDir, recipientFilePath, identityFilePath } from "../src/core/resolver"
+import {
+  resolveRecipient,
+  resolveIdentity,
+  securebackupDir,
+  recipientFilePath,
+  identityFilePath,
+  readKeyFromFile,
+} from "../src/core/resolver"
 
 describe("key resolver", () => {
-  test("returns flag value directly when provided", async () => {
-    const r = await resolveRecipient("age1abc")
-    expect(r).toBe("age1abc")
+  test("reads recipient from explicit file path (SSH -i style)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "securebackup-resolver-"))
+    try {
+      await writeFile(
+        join(dir, "my-recipient.txt"),
+        "# my custom key\nage1abc123def456ghi\n",
+      )
+      const result = await resolveRecipient(join(dir, "my-recipient.txt"))
+      expect(result).toBe("age1abc123def456ghi")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 
-    const i = await resolveIdentity("AGE-SECRET-KEY-DEF")
-    expect(i).toBe("AGE-SECRET-KEY-DEF")
+  test("reads identity from explicit file path (SSH -i style)", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "securebackup-resolver-"))
+    try {
+      await writeFile(
+        join(dir, "my-identity.txt"),
+        "# auto-generated\nAGE-SECRET-KEY-ABCDEF1234567890\n",
+      )
+      const result = await resolveIdentity(join(dir, "my-identity.txt"))
+      expect(result).toBe("AGE-SECRET-KEY-ABCDEF1234567890")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
   })
 
   test("reads recipient from ~/.securebackup/recipient.txt when flag is missing", async () => {
@@ -42,6 +69,17 @@ describe("key resolver", () => {
     }
   })
 
+  test("throws when explicit file path has no valid key", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "securebackup-resolver-"))
+    try {
+      await writeFile(join(dir, "bad.txt"), "# just a comment\n")
+      await expect(resolveRecipient(join(dir, "bad.txt"))).rejects.toThrow("No age1... key found")
+      await expect(resolveIdentity(join(dir, "bad.txt"))).rejects.toThrow("No AGE-SECRET-KEY-... found")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   test("throws when no flag and no file exists", async () => {
     const dir = await mkdtemp(join(tmpdir(), "securebackup-resolver-"))
     try {
@@ -52,7 +90,7 @@ describe("key resolver", () => {
     }
   })
 
-  test("throws when file exists but no valid key line is found", async () => {
+  test("throws when file exists but no valid key line is found (fallback path)", async () => {
     const dir = await mkdtemp(join(tmpdir(), "securebackup-resolver-"))
     try {
       await mkdir(join(dir, ".securebackup"), { recursive: true })
@@ -61,6 +99,17 @@ describe("key resolver", () => {
       
       await expect(resolveRecipient(undefined, dir)).rejects.toThrow("No --recipient given")
       await expect(resolveIdentity(undefined, dir)).rejects.toThrow("No --identity given")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  test("readKeyFromFile extracts matching line", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "securebackup-resolver-"))
+    try {
+      await writeFile(join(dir, "keys.txt"), "# comment\nage1abc\nother\n")
+      expect(await readKeyFromFile(join(dir, "keys.txt"), "age1")).toBe("age1abc")
+      expect(await readKeyFromFile(join(dir, "keys.txt"), "AGE-SECRET-KEY-")).toBe("")
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

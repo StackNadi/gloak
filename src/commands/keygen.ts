@@ -5,6 +5,7 @@ import { homedir } from "node:os"
 
 export type GenerateKeypairOptions = {
   homeDir?: string
+  outputDir?: string
 }
 
 export type GenerateKeypairResult = {
@@ -20,8 +21,7 @@ function timestamp(): string {
 }
 
 export async function generateKeypair(options: GenerateKeypairOptions = {}): Promise<GenerateKeypairResult> {
-  const home = options.homeDir ?? homedir()
-  const keyDir = join(home, ".securebackup")
+  const keyDir = options.outputDir ?? join(options.homeDir ?? homedir(), ".securebackup")
   const identityFile = join(keyDir, "identity.txt")
   const recipientFile = join(keyDir, "recipient.txt")
 

@@ -13,44 +13,83 @@ function usage(): string {
   return `securebackup — Bun CLI for age-encrypted chunked backups
 
 Usage:
-  securebackup keygen
-  securebackup upload <file> [--recipient <age1...>] --to local:/path [--chunk-size 20MB]
-  securebackup restore <backup_id> --from local:/path [--identity <AGE-SECRET-KEY...>] --output <file-or-dir>
-  securebackup encrypt <file> [--recipient <age1...>] --output <file.age>
-  securebackup encrypt <file> [--recipient <age1...>] --out-dir <chunks-dir> [--chunk-size 20MB]
-  securebackup decrypt <file.age> [--identity <AGE-SECRET-KEY...>] --output <file>
-  securebackup decrypt --chunks-dir <chunks-dir> [--identity <AGE-SECRET-KEY...>] --output <file>
-  securebackup verify <backup_id> --from local:/path
-  securebackup list --from local:/path
+  securebackup keygen                    [-o, --output <dir>]
+  securebackup upload <file>             [-r, --recipient <file>] --to <storage> [--chunk-size 20MB]
+  securebackup restore <backup-id>       [-i, --identity <file>] --from <storage> --output <path>
+  securebackup encrypt <file>            [-r, --recipient <file>] --output <file.age>
+  securebackup encrypt <file>            [-r, --recipient <file>] --out-dir <chunks-dir> [--chunk-size 20MB]
+  securebackup decrypt <file.age>        [-i, --identity <file>] --output <file>
+  securebackup decrypt --chunks-dir <dir> [-i, --identity <file>] --output <file>
+  securebackup verify <backup-id>        --from <storage>
+  securebackup list                      --from <storage>
 
-Run "securebackup keygen" first to set up keys. After that, --recipient and --identity
-are optional — SecureBackup reads them from ~/.securebackup/recipient.txt and
-~/.securebackup/identity.txt automatically.`
+-i, --identity <file>     Identity (private key) file  (default: ~/.securebackup/identity.txt)
+-r, --recipient <file>    Recipient (public key) file  (default: ~/.securebackup/recipient.txt)
+-o, --output <dir>        Output directory for keygen  (default: ~/.securebackup)
+
+Run "securebackup keygen" first to set up keys. After that, -i and -r are
+optional — SecureBackup reads from ~/.securebackup automatically.`
 }
 
-function parseArgs(argv: string[]): { command?: string; positional?: string; flags: Record<string, string> } {
+type Args = { command?: string; positional?: string; flags: Record<string, string> }
+
+function parseArgs(argv: string[]): Args {
   const [command, positional, ...rest] = argv
   const flags: Record<string, string> = {}
+
   for (let i = 0; i < rest.length; i++) {
     const item = rest[i]
-    if (!item.startsWith("--")) throw new Error(`Unexpected argument: ${item}`)
-    const value = rest[i + 1]
-    if (!value || value.startsWith("--")) throw new Error(`Missing value for ${item}`)
-    flags[item.slice(2)] = value
-    i++
+
+    // --long flags
+    if (item.startsWith("--")) {
+      const key = item.slice(2)
+      const value = rest[i + 1]
+      if (value === undefined || value.startsWith("-")) throw new Error(`Missing value for --${key}`)
+      flags[key] = value
+      i++
+      continue
+    }
+
+    // Short flags (-i, -r, -o, -h)
+    if (item.startsWith("-") && item.length === 2) {
+      const key = item.slice(1)
+      if (key === "h") {
+        console.log(usage())
+        process.exit(0)
+      }
+      const value = rest[i + 1]
+      if (value === undefined || value.startsWith("-")) throw new Error(`Missing value for -${key}`)
+      flags[key] = value
+      i++
+      continue
+    }
+
+    throw new Error(`Unexpected argument: ${item}`)
   }
+
   return { command, positional, flags }
 }
 
+/** Normalise short flags to their long-form key. */
+function normaliseFlags(flags: Record<string, string>): Record<string, string> {
+  const f = { ...flags }
+  if (f.i && !f.identity) f.identity = f.i
+  if (f.r && !f.recipient) f.recipient = f.r
+  if (f.o && !f.output) f.output = f.o
+  return f
+}
+
 async function main(): Promise<void> {
-  const { command, positional, flags } = parseArgs(Bun.argv.slice(2))
-  if (!command || command === "help" || command === "--help" || command === "-h") {
+  const { command, positional, flags: raw } = parseArgs(Bun.argv.slice(2))
+  const flags = normaliseFlags(raw)
+
+  if (!command || command === "help" || command === "--help") {
     console.log(usage())
     return
   }
 
   if (command === "keygen") {
-    const result = await generateKeypair()
+    const result = await generateKeypair({ outputDir: flags.output })
     console.log(`Keypair generated.\n\nRecipient:\n${result.recipient}\n\nIdentity file:\n${result.identityFile}\n\nRecipient file:\n${result.recipientFile}`)
     return
   }

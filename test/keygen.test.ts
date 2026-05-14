@@ -38,4 +38,25 @@ describe("key generation", () => {
       await rm(dir, { recursive: true, force: true })
     }
   })
+
+  test("supports custom outputDir directly", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "securebackup-keygen-"))
+    try {
+      const result = await generateKeypair({ outputDir: dir })
+
+      expect(result.keyDir).toBe(dir)
+      expect(result.identityFile).toBe(join(dir, "identity.txt"))
+      expect(result.recipientFile).toBe(join(dir, "recipient.txt"))
+      expect(result.identity).toStartWith("AGE-SECRET-KEY-")
+      expect(result.recipient).toStartWith("age1")
+
+      const identityText = await readFile(result.identityFile, "utf8")
+      expect(identityText).toContain(result.identity)
+
+      const recipientText = await readFile(result.recipientFile, "utf8")
+      expect(recipientText).toContain(result.recipient)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })
