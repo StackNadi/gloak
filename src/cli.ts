@@ -14,6 +14,7 @@ Usage:
   securebackup upload <file> --recipient <age1...> --to local:/path [--chunk-size 20MB]
   securebackup restore <backup_id> --from local:/path --identity <AGE-SECRET-KEY...> --output <file-or-dir>
   securebackup encrypt <file> --recipient <age1...> --output <file.age>
+  securebackup encrypt <file> --recipient <age1...> --out-dir <chunks-dir> [--chunk-size 20MB]
   securebackup decrypt <file.age> --identity <AGE-SECRET-KEY...> --output <file>
   securebackup verify <backup_id> --from local:/path
   securebackup list --from local:/path
@@ -61,9 +62,21 @@ async function main(): Promise<void> {
   }
 
   if (command === "encrypt") {
-    if (!positional || !flags.recipient || !flags.output) throw new Error(`encrypt requires <file>, --recipient, and --output\n\n${usage()}`)
-    const result = await encryptDirect({ inputFile: positional, recipient: flags.recipient, outputFile: flags.output })
-    console.log(`File encrypted successfully.\n\nOutput:\n${result.outputFile}\n\nBytes:\n${result.bytes}`)
+    if (!positional || !flags.recipient || (!flags.output && !flags["out-dir"])) {
+      throw new Error(`encrypt requires <file>, --recipient, and either --output or --out-dir\n\n${usage()}`)
+    }
+    const result = await encryptDirect({
+      inputFile: positional,
+      recipient: flags.recipient,
+      outputFile: flags.output,
+      chunksDir: flags["out-dir"],
+      chunkSize: flags["chunk-size"] ? parseSize(flags["chunk-size"]) : undefined,
+    })
+    if (result.chunksDir) {
+      console.log(`File encrypted and split successfully.\n\nChunks directory:\n${result.chunksDir}\n\nChunks:\n${result.chunks}`)
+    } else {
+      console.log(`File encrypted successfully.\n\nOutput:\n${result.outputFile}\n\nBytes:\n${result.bytes}`)
+    }
     return
   }
 

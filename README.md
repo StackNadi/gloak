@@ -1,53 +1,45 @@
-# SecureBackup CLI
+# SecureBackup
 
-Bun-based single-binary CLI for encrypted cloud-safe backups.
+SecureBackup is a Bun CLI for encrypting files with `age-encryption`.
 
-It follows `FEATURE_SPEC.md`:
+It has two jobs:
 
-1. Encrypt input file with `age-encryption`.
-2. Split encrypted payload into fixed-size chunks, default `20MB`.
-3. Store backup under a UUID folder.
-4. Upload chunks first.
-5. Upload `manifest.json` last.
-6. Restore by downloading manifest/chunks, verifying SHA-256, concatenating, and decrypting.
+1. Encrypt or decrypt a file directly.
+2. Create a backup made of encrypted chunks, with a manifest and a local storage backend.
 
-## Requirements
+The direct command is for quick work. The backup command is for cloud storage, where a single huge encrypted blob is annoying to upload, retry, or verify.
 
-- Bun 1.x
-
-Install dependencies:
+## Install
 
 ```bash
 bun install
 ```
 
-## Test
-
-```bash
-bun test
-```
-
-## Build single binary
+Build the standalone binary:
 
 ```bash
 bun build src/cli.ts --compile --outfile dist/securebackup
 ```
 
-## Generate an age identity/recipient
+Run tests:
 
-The CLI uses the `age-encryption` library. For now, generate keys from a tiny Bun one-liner:
+```bash
+bun test
+```
+
+## Create an age key
+
+SecureBackup uses the `age-encryption` package. Generate an identity and recipient like this:
 
 ```bash
 bun -e 'import * as age from "age-encryption"; const id = await age.generateIdentity(); console.log("identity=", id); console.log("recipient=", await age.identityToRecipient(id))'
 ```
 
-Keep the `identity` private. Use the `recipient` for upload or direct encryption.
+Keep the identity private. Use the recipient when encrypting.
 
-## Direct encrypt/decrypt without chunking
+## Encrypt one file
 
-Use these when you only want a plain age-encrypted file and do **not** want UUID folders, manifests, storage backends, or chunk splitting.
-
-Encrypt:
+This writes one `.age` file. No chunks. No manifest. No storage backend.
 
 ```bash
 ./dist/securebackup encrypt ./secret.txt \
@@ -55,7 +47,7 @@ Encrypt:
   --output ./secret.txt.age
 ```
 
-Decrypt:
+Decrypt it later:
 
 ```bash
 ./dist/securebackup decrypt ./secret.txt.age \
@@ -63,7 +55,30 @@ Decrypt:
   --output ./secret.txt
 ```
 
-## Upload
+## Encrypt and split into chunks
+
+Use this when you want encrypted chunks but do not want the full backup layout.
+
+```bash
+./dist/securebackup encrypt ./video.tar \
+  --recipient age1... \
+  --out-dir ./video-encrypted-chunks \
+  --chunk-size 20MB
+```
+
+The output directory contains files like this:
+
+```text
+000000.chunk
+000001.chunk
+000002.chunk
+```
+
+This mode encrypts the full file first, then splits the encrypted output. It does not create `manifest.json`. If you need restore metadata and verification later, use `upload` instead.
+
+## Upload a backup to local storage
+
+`upload` is the full backup flow. It creates a UUID folder, chunks the encrypted payload, writes checksums, and uploads `manifest.json` last.
 
 ```bash
 ./dist/securebackup upload ./backup.tar \
@@ -86,14 +101,29 @@ Remote:
 local:/mnt/backups/7f91c6c7-7a0b-44aa-ae23-997b60e4e998
 ```
 
-## Verify
+The storage layout is:
+
+```text
+/mnt/backups/
+  7f91c6c7-7a0b-44aa-ae23-997b60e4e998/
+    manifest.json
+    chunks/
+      000000.chunk
+      000001.chunk
+```
+
+The folder name is a UUID, not the original filename. The manifest still contains the original filename because restore needs it.
+
+## Verify a backup
 
 ```bash
 ./dist/securebackup verify 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
   --from local:/mnt/backups
 ```
 
-## Restore
+`verify` checks that the manifest exists, every chunk exists, chunk sizes match, and SHA-256 hashes match.
+
+## Restore a backup
 
 ```bash
 ./dist/securebackup restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
@@ -102,33 +132,43 @@ local:/mnt/backups/7f91c6c7-7a0b-44aa-ae23-997b60e4e998
   --output ./restored/
 ```
 
-If `--output` is an existing directory or ends with `/`, SecureBackup restores using the original filename from `manifest.json`.
+If `--output` is a directory, SecureBackup restores the original filename from `manifest.json`.
 
-## Current v0.1 scope
+## List backups
+
+```bash
+./dist/securebackup list --from local:/mnt/backups
+```
+
+## Current scope
 
 Implemented:
 
-- Bun CLI scaffold
-- Single binary build
-- Local backend
-- `upload`
-- `restore`
-- `verify`
-- `list`
-- `encrypt` / `decrypt` direct commands without chunking
+- Bun CLI
+- standalone binary build
+- `age-encryption` recipient mode
+- direct `encrypt` and `decrypt`
+- direct encrypted chunk split with `encrypt --out-dir`
+- local backend
+- `upload`, `restore`, `verify`, and `list`
 - UUID backup folders
-- `manifest.json`
-- 20 MiB default chunking
-- chunk SHA-256 verification
-- encrypted payload SHA-256 verification
-- `age-encryption` integration
+- fixed-width chunk names
+- chunk SHA-256 checks
+- encrypted payload SHA-256 checks
+- manifest upload after chunks
 
-Not implemented yet:
+Not built yet:
 
-- S3-compatible backend
-- Rclone backend
-- storage profiles
-- resumable upload
-- encrypted metadata
+- S3 or R2 backend
+- rclone backend
+- named storage profiles
+- resumable uploads
+- encrypted manifest metadata
 - streaming pipeline
 - Telegram integration
+
+## Notes
+
+`encrypt --out-dir` is intentionally bare. It gives you encrypted chunks and nothing else.
+
+`upload` is safer for backups because it keeps the metadata needed to verify and restore the file. Use that when the chunks are going to cloud storage and you want less future pain. Future-you is already tired. Give them the manifest.
