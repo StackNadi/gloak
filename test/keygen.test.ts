@@ -16,8 +16,17 @@ describe("key generation", () => {
       expect(result.identity).toStartWith("AGE-SECRET-KEY-")
       expect(result.recipient).toStartWith("age1")
 
-      expect(await readFile(result.identityFile, "utf8")).toBe(`${result.identity}\n`)
-      expect(await readFile(result.recipientFile, "utf8")).toBe(`${result.recipient}\n`)
+      const identityText = await readFile(result.identityFile, "utf8")
+      expect(identityText).toContain(result.identity)
+      expect(identityText).toContain("# created:")
+      expect(identityText).toContain("# public key:")
+      expect(identityText).toContain(result.recipient)
+      expect(identityText).toContain("do not edit")
+
+      const recipientText = await readFile(result.recipientFile, "utf8")
+      expect(recipientText).toContain(result.recipient)
+      expect(recipientText).toContain("# created:")
+      expect(recipientText).toContain("auto-generated")
 
       const dirMode = (await stat(result.keyDir)).mode & 0o777
       const identityMode = (await stat(result.identityFile)).mode & 0o777
