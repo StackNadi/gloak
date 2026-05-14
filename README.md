@@ -74,7 +74,18 @@ The output directory contains files like this:
 000002.chunk
 ```
 
-This mode encrypts the full file first, then splits the encrypted output. It does not create `manifest.json`. If you need restore metadata and verification later, use `upload` instead.
+Decrypt those chunks back into one file:
+
+```bash
+./dist/securebackup decrypt \
+  --chunks-dir ./video-encrypted-chunks \
+  --identity AGE-SECRET-KEY-... \
+  --output ./video.tar
+```
+
+This mode encrypts the full file first, then splits the encrypted output. Decrypt does the reverse: it joins the chunks in filename order, then decrypts the joined encrypted payload.
+
+It does not create or read `manifest.json`. If you need restore metadata and verification later, use `upload` instead.
 
 ## Upload a backup to local storage
 
@@ -149,6 +160,7 @@ Implemented:
 - `age-encryption` recipient mode
 - direct `encrypt` and `decrypt`
 - direct encrypted chunk split with `encrypt --out-dir`
+- direct encrypted chunk restore with `decrypt --chunks-dir`
 - local backend
 - `upload`, `restore`, `verify`, and `list`
 - UUID backup folders
@@ -170,5 +182,7 @@ Not built yet:
 ## Notes
 
 `encrypt --out-dir` is intentionally bare. It gives you encrypted chunks and nothing else.
+
+`decrypt --chunks-dir` is just as bare. It joins files named `000000.chunk`, `000001.chunk`, and so on, then decrypts the joined payload. It trusts the directory contents because this mode has no manifest.
 
 `upload` is safer for backups because it keeps the metadata needed to verify and restore the file. Use that when the chunks are going to cloud storage and you want less future pain. Future-you is already tired. Give them the manifest.

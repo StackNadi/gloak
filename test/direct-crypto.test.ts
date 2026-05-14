@@ -58,4 +58,25 @@ describe("direct encrypt/decrypt commands", () => {
       await rm(dir, { recursive: true, force: true })
     }
   })
+
+  test("can decrypt direct chunks back into the original file", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "securebackup-direct-chunk-decrypt-"))
+    try {
+      const input = join(dir, "secret.txt")
+      const chunksDir = join(dir, "chunks")
+      const restored = join(dir, "restored.txt")
+      await writeFile(input, "chunked direct encryption needs a matching decrypt path")
+      const identity = await age.generateIdentity()
+      const recipient = await age.identityToRecipient(identity)
+
+      await encryptDirect({ inputFile: input, recipient, chunksDir, chunkSize: 11 })
+      const result = await decryptDirect({ chunksDir, outputFile: restored, identity })
+
+      expect(result.outputFile).toBe(restored)
+      expect(result.bytes).toBe((await stat(restored)).size)
+      expect(await readFile(restored, "utf8")).toBe("chunked direct encryption needs a matching decrypt path")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })

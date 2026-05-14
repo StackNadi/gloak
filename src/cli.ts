@@ -16,6 +16,7 @@ Usage:
   securebackup encrypt <file> --recipient <age1...> --output <file.age>
   securebackup encrypt <file> --recipient <age1...> --out-dir <chunks-dir> [--chunk-size 20MB]
   securebackup decrypt <file.age> --identity <AGE-SECRET-KEY...> --output <file>
+  securebackup decrypt --chunks-dir <chunks-dir> --identity <AGE-SECRET-KEY...> --output <file>
   securebackup verify <backup_id> --from local:/path
   securebackup list --from local:/path
 `
@@ -81,8 +82,15 @@ async function main(): Promise<void> {
   }
 
   if (command === "decrypt") {
-    if (!positional || !flags.identity || !flags.output) throw new Error(`decrypt requires <file.age>, --identity, and --output\n\n${usage()}`)
-    const result = await decryptDirect({ inputFile: positional, identity: flags.identity, outputFile: flags.output })
+    if ((!positional && !flags["chunks-dir"]) || !flags.identity || !flags.output) {
+      throw new Error(`decrypt requires <file.age> or --chunks-dir, plus --identity and --output\n\n${usage()}`)
+    }
+    const result = await decryptDirect({
+      inputFile: positional,
+      chunksDir: flags["chunks-dir"],
+      identity: flags.identity,
+      outputFile: flags.output,
+    })
     console.log(`File decrypted successfully.\n\nOutput:\n${result.outputFile}\n\nBytes:\n${result.bytes}`)
     return
   }
