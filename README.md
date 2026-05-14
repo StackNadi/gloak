@@ -55,6 +55,9 @@ Decrypt it later:
   --output ./secret.txt
 ```
 
+> [!WARNING]
+> Do not let the intrusive thought win. Never `cat` encrypted `.age` files or chunk files. They are binary, and your terminal did not sign up for that nonsense.
+
 ## Encrypt and split into chunks
 
 Use this when you want encrypted chunks but do not want the full backup layout.
