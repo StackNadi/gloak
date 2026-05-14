@@ -41,7 +41,27 @@ The CLI uses the `age-encryption` library. For now, generate keys from a tiny Bu
 bun -e 'import * as age from "age-encryption"; const id = await age.generateIdentity(); console.log("identity=", id); console.log("recipient=", await age.identityToRecipient(id))'
 ```
 
-Keep the `identity` private. Use the `recipient` for upload.
+Keep the `identity` private. Use the `recipient` for upload or direct encryption.
+
+## Direct encrypt/decrypt without chunking
+
+Use these when you only want a plain age-encrypted file and do **not** want UUID folders, manifests, storage backends, or chunk splitting.
+
+Encrypt:
+
+```bash
+./dist/securebackup encrypt ./secret.txt \
+  --recipient age1... \
+  --output ./secret.txt.age
+```
+
+Decrypt:
+
+```bash
+./dist/securebackup decrypt ./secret.txt.age \
+  --identity AGE-SECRET-KEY-... \
+  --output ./secret.txt
+```
 
 ## Upload
 
@@ -95,6 +115,7 @@ Implemented:
 - `restore`
 - `verify`
 - `list`
+- `encrypt` / `decrypt` direct commands without chunking
 - UUID backup folders
 - `manifest.json`
 - 20 MiB default chunking

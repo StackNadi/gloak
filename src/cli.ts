@@ -3,6 +3,8 @@ import { uploadBackup } from "./commands/upload"
 import { restoreBackup } from "./commands/restore"
 import { verifyBackup } from "./commands/verify"
 import { listBackups } from "./commands/list"
+import { encryptDirect } from "./commands/encrypt"
+import { decryptDirect } from "./commands/decrypt"
 import { parseSize } from "./core/paths"
 
 function usage(): string {
@@ -11,6 +13,8 @@ function usage(): string {
 Usage:
   securebackup upload <file> --recipient <age1...> --to local:/path [--chunk-size 20MB]
   securebackup restore <backup_id> --from local:/path --identity <AGE-SECRET-KEY...> --output <file-or-dir>
+  securebackup encrypt <file> --recipient <age1...> --output <file.age>
+  securebackup decrypt <file.age> --identity <AGE-SECRET-KEY...> --output <file>
   securebackup verify <backup_id> --from local:/path
   securebackup list --from local:/path
 `
@@ -53,6 +57,20 @@ async function main(): Promise<void> {
     if (!positional || !flags.from || !flags.identity || !flags.output) throw new Error(`restore requires <backup_id>, --from, --identity, and --output\n\n${usage()}`)
     const result = await restoreBackup({ backupId: positional, from: flags.from, identity: flags.identity, output: flags.output })
     console.log(`Backup restored successfully.\n\nOutput:\n${result.outputFile}`)
+    return
+  }
+
+  if (command === "encrypt") {
+    if (!positional || !flags.recipient || !flags.output) throw new Error(`encrypt requires <file>, --recipient, and --output\n\n${usage()}`)
+    const result = await encryptDirect({ inputFile: positional, recipient: flags.recipient, outputFile: flags.output })
+    console.log(`File encrypted successfully.\n\nOutput:\n${result.outputFile}\n\nBytes:\n${result.bytes}`)
+    return
+  }
+
+  if (command === "decrypt") {
+    if (!positional || !flags.identity || !flags.output) throw new Error(`decrypt requires <file.age>, --identity, and --output\n\n${usage()}`)
+    const result = await decryptDirect({ inputFile: positional, identity: flags.identity, outputFile: flags.output })
+    console.log(`File decrypted successfully.\n\nOutput:\n${result.outputFile}\n\nBytes:\n${result.bytes}`)
     return
   }
 
