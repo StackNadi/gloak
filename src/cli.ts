@@ -6,6 +6,7 @@ import { listBackups } from "./commands/list"
 import { encryptDirect } from "./commands/encrypt"
 import { decryptDirect } from "./commands/decrypt"
 import { generateKeypair } from "./commands/keygen"
+import { resolveRecipient, resolveIdentity } from "./core/resolver"
 import { parseSize } from "./core/paths"
 
 function usage(): string {
@@ -13,15 +14,18 @@ function usage(): string {
 
 Usage:
   securebackup keygen
-  securebackup upload <file> --recipient <age1...> --to local:/path [--chunk-size 20MB]
-  securebackup restore <backup_id> --from local:/path --identity <AGE-SECRET-KEY...> --output <file-or-dir>
-  securebackup encrypt <file> --recipient <age1...> --output <file.age>
-  securebackup encrypt <file> --recipient <age1...> --out-dir <chunks-dir> [--chunk-size 20MB]
-  securebackup decrypt <file.age> --identity <AGE-SECRET-KEY...> --output <file>
-  securebackup decrypt --chunks-dir <chunks-dir> --identity <AGE-SECRET-KEY...> --output <file>
+  securebackup upload <file> [--recipient <age1...>] --to local:/path [--chunk-size 20MB]
+  securebackup restore <backup_id> --from local:/path [--identity <AGE-SECRET-KEY...>] --output <file-or-dir>
+  securebackup encrypt <file> [--recipient <age1...>] --output <file.age>
+  securebackup encrypt <file> [--recipient <age1...>] --out-dir <chunks-dir> [--chunk-size 20MB]
+  securebackup decrypt <file.age> [--identity <AGE-SECRET-KEY...>] --output <file>
+  securebackup decrypt --chunks-dir <chunks-dir> [--identity <AGE-SECRET-KEY...>] --output <file>
   securebackup verify <backup_id> --from local:/path
   securebackup list --from local:/path
-`
+
+Run "securebackup keygen" first to set up keys. After that, --recipient and --identity
+are optional — SecureBackup reads them from ~/.securebackup/recipient.txt and
+~/.securebackup/identity.txt automatically.`
 }
 
 function parseArgs(argv: string[]): { command?: string; positional?: string; flags: Record<string, string> } {
@@ -52,10 +56,11 @@ async function main(): Promise<void> {
   }
 
   if (command === "upload") {
-    if (!positional || !flags.recipient || !flags.to) throw new Error(`upload requires <file>, --recipient, and --to\n\n${usage()}`)
+    if (!positional || !flags.to) throw new Error(`upload requires <file> and --to\n\n${usage()}`)
+    const recipient = await resolveRecipient(flags.recipient)
     const result = await uploadBackup({
       inputFile: positional,
-      recipient: flags.recipient,
+      recipient,
       to: flags.to,
       chunkSize: flags["chunk-size"] ? parseSize(flags["chunk-size"]) : undefined,
     })
@@ -64,19 +69,21 @@ async function main(): Promise<void> {
   }
 
   if (command === "restore") {
-    if (!positional || !flags.from || !flags.identity || !flags.output) throw new Error(`restore requires <backup_id>, --from, --identity, and --output\n\n${usage()}`)
-    const result = await restoreBackup({ backupId: positional, from: flags.from, identity: flags.identity, output: flags.output })
+    if (!positional || !flags.from || !flags.output) throw new Error(`restore requires <backup_id>, --from, and --output\n\n${usage()}`)
+    const identity = await resolveIdentity(flags.identity)
+    const result = await restoreBackup({ backupId: positional, from: flags.from, identity, output: flags.output })
     console.log(`Backup restored successfully.\n\nOutput:\n${result.outputFile}`)
     return
   }
 
   if (command === "encrypt") {
-    if (!positional || !flags.recipient || (!flags.output && !flags["out-dir"])) {
-      throw new Error(`encrypt requires <file>, --recipient, and either --output or --out-dir\n\n${usage()}`)
+    if (!positional || (!flags.output && !flags["out-dir"])) {
+      throw new Error(`encrypt requires <file> and either --output or --out-dir\n\n${usage()}`)
     }
+    const recipient = await resolveRecipient(flags.recipient)
     const result = await encryptDirect({
       inputFile: positional,
-      recipient: flags.recipient,
+      recipient,
       outputFile: flags.output,
       chunksDir: flags["out-dir"],
       chunkSize: flags["chunk-size"] ? parseSize(flags["chunk-size"]) : undefined,
@@ -90,13 +97,14 @@ async function main(): Promise<void> {
   }
 
   if (command === "decrypt") {
-    if ((!positional && !flags["chunks-dir"]) || !flags.identity || !flags.output) {
-      throw new Error(`decrypt requires <file.age> or --chunks-dir, plus --identity and --output\n\n${usage()}`)
+    if ((!positional && !flags["chunks-dir"]) || !flags.output) {
+      throw new Error(`decrypt requires <file.age> or --chunks-dir, plus --output\n\n${usage()}`)
     }
+    const identity = await resolveIdentity(flags.identity)
     const result = await decryptDirect({
       inputFile: positional,
       chunksDir: flags["chunks-dir"],
-      identity: flags.identity,
+      identity,
       outputFile: flags.output,
     })
     console.log(`File decrypted successfully.\n\nOutput:\n${result.outputFile}\n\nBytes:\n${result.bytes}`)

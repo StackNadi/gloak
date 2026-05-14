@@ -43,31 +43,37 @@ SecureBackup writes the files here:
   recipient.txt
 ```
 
-`identity.txt` is the private key. Keep it private. `recipient.txt` is safe to use for encryption commands.
+>`identity.txt` is the private key. Keep it private. `recipient.txt` is safe to use for encryption commands.
 
-Example:
+After you run `keygen` once, `--recipient` and `--identity` are optional. SecureBackup reads the key files from `~/.securebackup/` automatically when you skip those flags.
 
-```bash
-RECIPIENT=$(cat ~/.securebackup/recipient.txt)
-./dist/securebackup encrypt ./secret.txt \
-  --recipient "$RECIPIENT" \
-  --output ./secret.txt.age
-```
-
-For decrypt commands, pass the private key value from `identity.txt`:
+Encrypt:
 
 ```bash
-IDENTITY=$(cat ~/.securebackup/identity.txt)
-./dist/securebackup decrypt ./secret.txt.age \
-  --identity "$IDENTITY" \
-  --output ./secret.txt
+./dist/securebackup encrypt ./secret.txt --output ./secret.txt.age
 ```
+
+Decrypt:
+
+```bash
+./dist/securebackup decrypt ./secret.txt.age --output ./secret.txt
+```
+
+You can still pass `--recipient` or `--identity` explicitly if you want to use a different key or override the default. The saved files are only a fallback.
 
 Keep the identity file out of git, screenshots, logs, pastebins, and any group chat where optimism goes to die.
 
 ## Encrypt one file
 
 This writes one `.age` file. No chunks. No manifest. No storage backend.
+
+If you ran `keygen` already, just pass the file and output path:
+
+```bash
+./dist/securebackup encrypt ./secret.txt --output ./secret.txt.age
+```
+
+You can still override the recipient:
 
 ```bash
 ./dist/securebackup encrypt ./secret.txt \
@@ -76,6 +82,12 @@ This writes one `.age` file. No chunks. No manifest. No storage backend.
 ```
 
 Decrypt it later:
+
+```bash
+./dist/securebackup decrypt ./secret.txt.age --output ./secret.txt
+```
+
+Or with an explicit key:
 
 ```bash
 ./dist/securebackup decrypt ./secret.txt.age \
@@ -89,6 +101,16 @@ Decrypt it later:
 ## Encrypt and split into chunks
 
 Use this when you want encrypted chunks but do not want the full backup layout.
+
+If you ran `keygen`:
+
+```bash
+./dist/securebackup encrypt ./video.tar \
+  --out-dir ./video-encrypted-chunks \
+  --chunk-size 20MB
+```
+
+Or with an explicit recipient:
 
 ```bash
 ./dist/securebackup encrypt ./video.tar \
@@ -121,6 +143,14 @@ It does not create or read `manifest.json`. If you need restore metadata and ver
 ## Upload a backup to local storage
 
 `upload` is the full backup flow. It creates a UUID folder, chunks the encrypted payload, writes checksums, and uploads `manifest.json` last.
+
+If you ran `keygen`:
+
+```bash
+./dist/securebackup upload ./backup.tar --to local:/mnt/backups
+```
+
+Or with an explicit recipient:
 
 ```bash
 ./dist/securebackup upload ./backup.tar \
@@ -167,6 +197,16 @@ The folder name is a UUID, not the original filename. The manifest still contain
 
 ## Restore a backup
 
+If you ran `keygen`:
+
+```bash
+./dist/securebackup restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
+  --from local:/mnt/backups \
+  --output ./restored/
+```
+
+Or with an explicit identity:
+
 ```bash
 ./dist/securebackup restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
   --from local:/mnt/backups \
@@ -189,6 +229,7 @@ Implemented:
 - Bun CLI
 - standalone binary build
 - key generation with `securebackup keygen`
+- auto key resolution from `~/.securebackup/`
 - `age-encryption` recipient mode
 - direct `encrypt` and `decrypt`
 - direct encrypted chunk split with `encrypt --out-dir`
