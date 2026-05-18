@@ -1,5 +1,5 @@
 import * as age from "age-encryption"
-import { chmod, mkdir, writeFile } from "node:fs/promises"
+import { access, chmod, mkdir, writeFile } from "node:fs/promises"
 import { join } from "node:path"
 import { homedir } from "node:os"
 
@@ -12,12 +12,33 @@ export type GenerateKeypairResult = {
   keyDir: string
   identityFile: string
   recipientFile: string
-  identity: string
   recipient: string
 }
 
 function timestamp(): string {
   return new Date().toISOString().replace(/\.\d{3}Z$/, "+00:00")
+}
+
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path)
+    return true
+  } catch {
+    return false
+  }
+}
+
+function existingKeyFilesError(identityFile: string, recipientFile: string): Error {
+  return new Error(
+    [
+      "Key files already exist; refusing to overwrite them.",
+      "",
+      `Identity file: ${identityFile}`,
+      `Recipient file: ${recipientFile}`,
+      "",
+      "Choose a different --output directory or move the existing key files first.",
+    ].join("\n"),
+  )
 }
 
 export async function generateKeypair(options: GenerateKeypairOptions = {}): Promise<GenerateKeypairResult> {
@@ -27,6 +48,10 @@ export async function generateKeypair(options: GenerateKeypairOptions = {}): Pro
 
   await mkdir(keyDir, { recursive: true, mode: 0o700 })
   await chmod(keyDir, 0o700)
+
+  if ((await exists(identityFile)) || (await exists(recipientFile))) {
+    throw existingKeyFilesError(identityFile, recipientFile)
+  }
 
   const identity = await age.generateIdentity()
   const recipient = await age.identityToRecipient(identity)
@@ -52,5 +77,5 @@ export async function generateKeypair(options: GenerateKeypairOptions = {}): Pro
   await writeFile(recipientFile, recipientContent, { mode: 0o644, flag: "wx" })
   await chmod(recipientFile, 0o644)
 
-  return { keyDir, identityFile, recipientFile, identity, recipient }
+  return { keyDir, identityFile, recipientFile, recipient }
 }

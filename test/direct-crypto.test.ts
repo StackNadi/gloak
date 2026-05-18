@@ -59,7 +59,7 @@ describe("direct encrypt/decrypt commands", () => {
     }
   })
 
-  test("can decrypt direct chunks back into the original file", async () => {
+  test("refuses to decrypt direct chunks without a manifest integrity file", async () => {
     const dir = await mkdtemp(join(tmpdir(), "securebackup-direct-chunk-decrypt-"))
     try {
       const input = join(dir, "secret.txt")
@@ -70,11 +70,7 @@ describe("direct encrypt/decrypt commands", () => {
       const recipient = await age.identityToRecipient(identity)
 
       await encryptDirect({ inputFile: input, recipient, chunksDir, chunkSize: 11 })
-      const result = await decryptDirect({ chunksDir, outputFile: restored, identity })
-
-      expect(result.outputFile).toBe(restored)
-      expect(result.bytes).toBe((await stat(restored)).size)
-      expect(await readFile(restored, "utf8")).toBe("chunked direct encryption needs a matching decrypt path")
+      await expect(decryptDirect({ chunksDir, outputFile: restored, identity })).rejects.toThrow(/manifest/i)
     } finally {
       await rm(dir, { recursive: true, force: true })
     }

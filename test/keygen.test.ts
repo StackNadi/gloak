@@ -13,11 +13,10 @@ describe("key generation", () => {
       expect(result.keyDir).toBe(join(dir, ".securebackup"))
       expect(result.identityFile).toBe(join(dir, ".securebackup", "identity.txt"))
       expect(result.recipientFile).toBe(join(dir, ".securebackup", "recipient.txt"))
-      expect(result.identity).toStartWith("AGE-SECRET-KEY-")
       expect(result.recipient).toStartWith("age1")
 
       const identityText = await readFile(result.identityFile, "utf8")
-      expect(identityText).toContain(result.identity)
+      expect(identityText).toContain("AGE-SECRET-KEY-")
       expect(identityText).toContain("# created:")
       expect(identityText).toContain("# public key:")
       expect(identityText).toContain(result.recipient)
@@ -47,11 +46,10 @@ describe("key generation", () => {
       expect(result.keyDir).toBe(dir)
       expect(result.identityFile).toBe(join(dir, "identity.txt"))
       expect(result.recipientFile).toBe(join(dir, "recipient.txt"))
-      expect(result.identity).toStartWith("AGE-SECRET-KEY-")
       expect(result.recipient).toStartWith("age1")
 
       const identityText = await readFile(result.identityFile, "utf8")
-      expect(identityText).toContain(result.identity)
+      expect(identityText).toContain("AGE-SECRET-KEY-")
 
       const recipientText = await readFile(result.recipientFile, "utf8")
       expect(recipientText).toContain(result.recipient)
