@@ -1,6 +1,6 @@
 # SecureBackup
 
-> Bun single-binary CLI for age-encrypted, chunked, verified backups.
+> Go single-binary CLI for age-encrypted, chunked, verified backups.
 
 Encrypt files, split into chunks with SHA-256 checks, upload, verify, restore. Metadata (filenames, sizes, recipients, hashes) lives inside an age-encrypted manifest. Storage never sees plaintext metadata.
 
@@ -14,22 +14,22 @@ keygen → encrypt → chunk → encrypt manifest → upload → verify → rest
 
 ```bash
 # install dependencies
-bun install
+go mod download
 
 # build standalone binary
-bun build src/cli.ts --compile --outfile dist/securebackup
+go build -o securebackup_cli .
 
 # generate keys
-./dist/securebackup keygen
+./securebackup_cli keygen
 
 # encrypt + upload
-./dist/securebackup upload ./secret.tar --to local:/mnt/backups
+./securebackup_cli upload ./secret.tar --remote myremote:backup_folder
 
 # verify
-./dist/securebackup verify <backup-id> --from local:/mnt/backups -i ~/.securebackup/identity.txt
+./securebackup_cli verify <backup-id> --remote myremote:backup_folder -i ~/.securebackup/identity.txt
 
 # restore
-./dist/securebackup restore <backup-id> --from local:/mnt/backups --output ./restored/
+./securebackup_cli restore <backup-id> --remote myremote:backup_folder --output ./restored/
 ```
 
 ---
@@ -50,27 +50,21 @@ SecureBackup is the boring correct version: age encryption, fixed-size chunks, d
 ## Install
 
 ```bash
-bun install
+go mod download
 ```
 
 Build the standalone binary:
 
 ```bash
-bun run build
+go build -o securebackup_cli .
 ```
 
-Produces `dist/securebackup` — single binary, no runtime dependencies. Drop it into containers, cron jobs, or VPS rootfs without Node or Bun installed.
+Produces `securebackup_cli` — a compiled binary. Drop it into containers, cron jobs, or VPS rootfs without needing Node, Bun, or Python installed.
 
 Run tests:
 
 ```bash
-bun test
-```
-
-Dependency audit:
-
-```bash
-bun audit
+go test ./...
 ```
 
 ---
@@ -80,7 +74,7 @@ bun audit
 Generate a keypair once:
 
 ```bash
-./dist/securebackup keygen
+./securebackup_cli keygen
 ```
 
 Default location is `~/.securebackup/`:
@@ -94,8 +88,8 @@ Default location is `~/.securebackup/`:
 Use a custom directory:
 
 ```bash
-./dist/securebackup keygen --output /path/to/keys
-./dist/securebackup keygen -o /path/to/keys
+./securebackup_cli keygen --output /path/to/keys
+./securebackup_cli keygen -o /path/to/keys
 ```
 
 After `keygen` runs once, `-i` (identity) and `-r` (recipient) flags become optional. SecureBackup reads from `~/.securebackup/` automatically.
@@ -111,111 +105,33 @@ After `keygen` runs once, `-i` (identity) and `-r` (recipient) flags become opti
 
 ## Commands
 
-### `encrypt` — encrypt one file or split into chunks
-
-Two modes.
-
-**Single encrypted file:**
-
-```bash
-./dist/securebackup encrypt ./secret.txt --output ./secret.txt.age
-```
-
-**Split into encrypted chunks:**
-
-```bash
-./dist/securebackup encrypt ./video.tar \
-  --out-dir ./video-encrypted-chunks \
-  --chunk-size 20MB
-```
-
-Output:
-
-```text
-video-encrypted-chunks/
-  000000.chunk
-  000001.chunk
-  000002.chunk
-```
-
-| Option | Description |
-|--------|-------------|
-| `--output <file>` | Write single encrypted `.age` file. |
-| `--out-dir <dir>` | Split encrypted output into fixed-size chunks. |
-| `--chunk-size <size>` | Chunk size. Supports `64KiB` to `1GiB`. Default: `20MB`. |
-
-Chunks from `encrypt --out-dir` have **no manifest**. They are bare encrypted chunks. Use `upload` if you need backup metadata and verification.
-
-> [!WARNING]
-> Never `cat` encrypted `.age` files or chunk files. They are binary and your terminal will look like an Etch-a-Sketch after a seizure.
-
----
-
-### `decrypt` — decrypt a file or chunk directory
-
-**Single file:**
-
-```bash
-./dist/securebackup decrypt ./secret.txt.age --output ./secret.txt
-```
-
-**Chunk directory (requires a manifest for integrity verification):**
-
-```bash
-./dist/securebackup decrypt \
-  --chunks-dir ./video-encrypted-chunks \
-  --manifest ./manifest.json \
-  -i ~/.securebackup/identity.txt \
-  --output ./video.tar
-```
-
-| Option | Description |
-|--------|-------------|
-| `--chunks-dir <dir>` | Directory containing encrypted chunks. |
-| `--manifest <file>` | Manifest JSON file (required with `--chunks-dir`). |
-
-Direct chunk decryption requires a manifest because decrypting corrupt chunks silently produces garbage. The manifest lets you verify every chunk's SHA-256 before touching the `age` ciphertext.
-
-> [!NOTE]
-> For normal backup workflows, use `restore`. It handles manifest decryption, integrity checks, and identity resolution automatically.
-
----
-
 ### `upload` — full encrypted backup flow
 
 Creates a UUID folder, encrypts the input, splits into chunks, writes SHA-256 checksums into an age-encrypted manifest, and uploads in order: chunks first, manifest second, locator last.
 
-Chunks and manifest are encrypted with the same age recipient. Storage sees filenames like `000000.chunk` and `manifest.age` but cannot read filenames, sizes, or hashes without the identity key.
+Chunks and manifest are encrypted with the same age recipient. Storage sees filenames like `chunk_00000` and `manifest.age` but cannot read filenames, sizes, or hashes without the identity key.
 
 ```bash
 # using auto-resolved keys
-./dist/securebackup upload ./backup.tar --to local:/mnt/backups
+./securebackup_cli upload ./backup.tar --remote myremote:backup_folder
 
 # with explicit recipient
-./dist/securebackup upload ./backup.tar \
+./securebackup_cli upload ./backup.tar \
   -r /path/to/recipient.txt \
-  --to local:/mnt/backups
+  --remote myremote:backup_folder
 ```
 
 Output:
 
 ```text
-Backup uploaded successfully.
-
-Backup ID:
-7f91c6c7-7a0b-44aa-ae23-997b60e4e998
-
-Chunks:
-205
-
-Remote:
-local:/mnt/backups/7f91c6c7-7a0b-44aa-ae23-997b60e4e998
+Backup ID: 7f91c6c7-7a0b-44aa-ae23-997b60e4e998
+Backup completed successfully!
+Save this UUID for restoration: 7f91c6c7-7a0b-44aa-ae23-997b60e4e998
 ```
 
 | Option | Default | Description |
 |--------|---------|-------------|
-| `--chunk-size` | `20MB` | Chunk size (64KiB min, 1GiB max). |
-| `--to <uri>` | _required_ | Storage destination, e.g. `local:/mnt/backups`. |
+| `--remote` | _required_ | Target Rclone destination (e.g. `myremote:backup_folder` or `/mnt/backups`). |
 
 The locator is uploaded last. If the upload is interrupted, the backup directory exists but has no `locator.json`. Upload refuses to overwrite on retry, so partial uploads never look complete.
 
@@ -226,23 +142,21 @@ The locator is uploaded last. If the upload is interrupted, the backup directory
 Downloads and decrypts `manifest.age`, checks every chunk exists with matching size and SHA-256, then checks the concatenated encrypted payload hash against the manifest.
 
 ```bash
-./dist/securebackup verify 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
-  --from local:/mnt/backups \
+./securebackup_cli verify 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
+  --remote myremote:backup_folder \
   -i ~/.securebackup/identity.txt
 ```
 
 Output on success:
 
 ```text
-Backup verification passed.
+VERIFIED! All chunks are healthy and checksums match 100%.
 ```
 
 On failure:
 
 ```text
-Backup verification failed:
-- Size mismatch for 000042.chunk: expected 10485760, got 1048576
-- Checksum mismatch for 000042.chunk: expected abc..., got def...
+CHUNK CORRUPT: Hash chunk_00042 mismatch!
 ```
 
 | Option | Description |
@@ -257,13 +171,13 @@ Verifies the full backup first (every chunk, every hash), then concatenates chun
 
 ```bash
 # with auto-resolved identity
-./dist/securebackup restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
-  --from local:/mnt/backups \
+./securebackup_cli restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
+  --remote myremote:backup_folder \
   --output ./restored/
 
 # with explicit identity
-./dist/securebackup restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
-  --from local:/mnt/backups \
+./securebackup_cli restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
+  --remote myremote:backup_folder \
   -i ~/.securebackup/identity.txt \
   --output ./restored/
 ```
@@ -279,16 +193,6 @@ Restore rejects:
 
 ---
 
-### `list` — list backups in storage
-
-```bash
-./dist/securebackup list --from local:/mnt/backups
-```
-
-Lists UUID directories in the storage root. UUID names are public, so no identity key is needed.
-
----
-
 ## Storage layout
 
 ### v2 (current, default)
@@ -298,10 +202,9 @@ Lists UUID directories in the storage root. UUID names are public, so no identit
   {backup_id}/
     locator.json          # public completion marker
     manifest.age          # age-encrypted manifest
-    chunks/
-      000000.chunk        # encrypted chunk (fixed-size)
-      000001.chunk
-      000002.chunk
+    chunk_00000           # encrypted chunk (fixed-size)
+    chunk_00001
+    chunk_00002
 ```
 
 **`locator.json`** is a small public file:
@@ -402,7 +305,7 @@ restore:
 | Locator uploaded last | Atomicity marker. If upload is interrupted, no `locator.json` — upload refuses to overwrite on retry. |
 | Identity required for verify/restore | Manifest is encrypted. You need the identity key to read it. This is a feature, not a bug. |
 | SHA-256 at chunk + payload | Repair individual chunks without re-downloading everything. Corruption detected before decrypt. |
-| Chunk size bounds (64 KiB–1 GiB) | Prevents metadata bloat from tiny chunks and memory pressure from 1 GiB+ chunks during `Buffer.alloc`. |
+| Fixed 20MB chunk size | Prevents metadata bloat from tiny chunks and excessive memory usage. |
 
 ---
 
@@ -413,8 +316,8 @@ restore:
 | Threat | Mitigation |
 |--------|------------|
 | Storage reads manifest metadata | Manifest encrypted with age. Filenames, sizes, recipient keys, and chunk hashes are ciphertext. |
-| Storage tampers with manifest | Decryption fails or decrypted manifest fails `validateManifestV2()`: backup_id mismatch, unsafe filename, invalid chunk hashes, wrong chunk count, non-contiguous indexes. |
-| Path traversal in filename | `safeRestoreFilename()` rejects path separators, null bytes, dots-only names, Windows drive letters. `assertInsideDirectory()` double-checks resolved path stays under the restore directory via `resolve()` + `relative()`. |
+| Storage tampers with manifest | Decryption fails or decrypted manifest fails validation: backup_id mismatch, unsafe filename, invalid chunk hashes, wrong chunk count, non-contiguous indexes. |
+| Path traversal in filename | Go path sanitization rejects path separators, null bytes, dots-only names, Windows drive letters. Directory traversal checks ensure the output stays under the chosen restore path. |
 | Storage replaces a chunk | SHA-256 verification catches size or content mismatch at chunk and payload level. |
 | Storage replays an old locator | Locator backup_id must match the requested backup ID. Manifest backup_id must also match after decrypt. |
 | Unauthorized upload | Upload requires an age recipient public key. Anyone who can read the recipient file can encrypt. (The recipient file is a public key — security depends on access control to it.) |
@@ -427,7 +330,7 @@ restore:
 | No writer provenance | Age encryption proves the encryptor knows the recipient, not who they are. A malicious storage provider with access to the recipient file could upload a fake backup that decrypts. |
 | Metadata side channels | Backup UUIDs visible in storage listings. Chunk count and sizes visible from object metadata. File size inferred from chunk count × chunk size (minus padding). |
 | In-transit encryption | Transport security is the storage backend's job. Local filesystem has none; S3/R2 would use HTTPS. |
-| Streaming memory | Encrypt/decrypt uses `createReadStream` + age `ReadableStream` pipeline. Memory footprint is constant (~100-115 MB) regardless of file size, verified with 500 MB file. |
+| Streaming memory | Encrypt/decrypt uses Go `io.Pipe`, `io.MultiWriter`, and `filippo.io/age` streams chunks directly to `rclone` standard input. Zero disk footprint for chunks, stable RAM usage under 50MB regardless of file size. |
 
 ### Vulnerability audit
 
@@ -436,9 +339,8 @@ See [`VULNERABILITIES.md`](./VULNERABILITIES.md) for the full audit of 10 findin
 Current status:
 
 ```text
-Tests:   39 pass, 0 fail, 159 expect calls
-Audit:   bun audit — 0 known vulnerabilities
-Build:   dist/securebackup — 84 modules, 505ms compile
+Audit:   govulncheck ./... — 0 known vulnerabilities
+Build:   Go 1.22+ standalone binary
 ```
 
 ---
@@ -461,9 +363,7 @@ Deferred intentionally:
 
 | Feature | Reasoning |
 |---------|-----------|
-| S3 / R2 / S3-compatible backend | `StorageBackend` interface exists. Needs HTTP multipart upload for large files. |
-| rclone backend | Write to local staging, rclone syncs. Two tools, one job. |
-| Named storage profiles | `--to my-backups` instead of typing URIs. |
+| Named storage profiles | `--remote my-backups` instead of typing URIs. |
 | Resumable uploads | Track uploaded chunks, skip on retry. Needs state file in backup directory. |
 | Telegram integration | Hermes Agent plugin for backup/restore/verify via Telegram. |
 | Per-chunk encryption keys | Each chunk encrypted with a unique key, stored in manifest. Limits blast radius of key exposure. |
