@@ -51,16 +51,11 @@ func readKeyFile(path string, prefix string) (string, error) {
 
 type KeygenCmd struct {
 	OutputDir string `help:"Output directory for identity.txt and recipient.txt." short:"o"`
+	Force     bool   `help:"Overwrite existing identity.txt and recipient.txt." short:"f"`
 }
 
 func (k *KeygenCmd) Run() error {
 	pterm.Info.Println("Generating X25519 Age keypair...")
-
-	pubKey, _, fileContent, err := crypto.GenerateKey()
-	if err != nil {
-		pterm.Error.Printf("Failed: %v\n", err)
-		return err
-	}
 
 	dir := k.OutputDir
 	if dir == "" {
@@ -73,6 +68,30 @@ func (k *KeygenCmd) Run() error {
 
 	identPath := filepath.Join(dir, "identity.txt")
 	recipPath := filepath.Join(dir, "recipient.txt")
+
+	if !k.Force {
+		var existingPaths []string
+		for _, path := range []string{identPath, recipPath} {
+			if _, err := os.Stat(path); err == nil {
+				existingPaths = append(existingPaths, path)
+			} else if !os.IsNotExist(err) {
+				return fmt.Errorf("failed to check %s: %w", path, err)
+			}
+		}
+		if len(existingPaths) > 0 {
+			pterm.Warning.Println("Existing keypair found. Overwriting will make backups encrypted with the old key UNRECOVERABLE. Use --force to confirm.")
+			for _, path := range existingPaths {
+				pterm.Warning.Printf("Existing file: %s\n", path)
+			}
+			return fmt.Errorf("refusing to overwrite existing keypair")
+		}
+	}
+
+	pubKey, _, fileContent, err := crypto.GenerateKey()
+	if err != nil {
+		pterm.Error.Printf("Failed: %v\n", err)
+		return err
+	}
 
 	if err := os.WriteFile(identPath, []byte(fileContent), 0600); err != nil {
 		return fmt.Errorf("failed to write identity.txt: %w", err)
