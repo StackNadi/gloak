@@ -2,7 +2,7 @@
 
 ## Summary
 
-SecureBackup should replace plaintext `manifest.json` metadata with an age-encrypted manifest envelope. The goal is metadata privacy on untrusted backup storage while preserving the existing chunked backup layout and restore workflow.
+Gloak should replace plaintext `manifest.json` metadata with an age-encrypted manifest envelope. The goal is metadata privacy on untrusted backup storage while preserving the existing chunked backup layout and restore workflow.
 
 This design intentionally prioritizes **metadata privacy** over writer provenance. It prevents storage providers and casual readers from seeing filenames, sizes, recipients, and chunk hashes, but it does not prove which trusted local machine created the manifest. That trade-off is explicit, because pretending encrypted metadata is the same as signed metadata is how security documents become fan fiction.
 
@@ -28,7 +28,7 @@ This design intentionally prioritizes **metadata privacy** over writer provenanc
 ## Users / Actors
 
 - **User:** Uploads, verifies, and restores encrypted backups.
-- **SecureBackup CLI:** Encrypts/decrypts payloads and manifests, validates metadata, and reads/writes storage objects.
+- **Gloak CLI:** Encrypts/decrypts payloads and manifests, validates metadata, and reads/writes storage objects.
 - **Storage backend:** Stores opaque chunks plus encrypted manifest envelope.
 - **Attacker / malicious storage provider:** Can read, delete, replay, or modify stored objects but does not possess the user's age identity private key.
 
@@ -70,7 +70,7 @@ Version 2 should use this layout:
 ```ts
 type PublicLocatorV2 = {
   version: 2
-  app: "securebackup"
+  app: "gloak"
   backup_id: string
   manifest: {
     name: "manifest.age"
@@ -98,7 +98,7 @@ type EncryptedManifestPlaintextV2 = {
   backup_id: string
   created_at: string
   app: {
-    name: "securebackup"
+    name: "gloak"
     version: string
     runtime: "bun"
   }
@@ -165,7 +165,7 @@ flowchart TD
 
 ## Main Flow: Upload
 
-1. User runs `securebackup upload <file> --to <destination> --recipient <recipient-file>`.
+1. User runs `gloak upload <file> --to <destination> --recipient <recipient-file>`.
 2. CLI validates input file, recipient, destination, and chunk size.
 3. CLI generates UUID v4 `backup_id`.
 4. CLI encrypts the payload with age using the payload recipients.
@@ -181,7 +181,7 @@ flowchart TD
 
 ## Main Flow: Verify
 
-1. User runs `securebackup verify <backup_id> --from <destination> --identity <identity-file>`.
+1. User runs `gloak verify <backup_id> --from <destination> --identity <identity-file>`.
 2. CLI validates `backup_id` as UUID v4.
 3. CLI downloads and validates `locator.json`.
 4. CLI downloads `manifest.age`.
@@ -195,7 +195,7 @@ flowchart TD
 
 ## Main Flow: Restore
 
-1. User runs `securebackup restore <backup_id> --from <destination> --identity <identity-file> --output <path>`.
+1. User runs `gloak restore <backup_id> --from <destination> --identity <identity-file> --output <path>`.
 2. CLI performs the verify flow through encrypted payload hash verification.
 3. CLI decrypts encrypted payload with age.
 4. If output is a directory, CLI uses only a validated safe `manifest.source.original_filename`.
@@ -262,7 +262,7 @@ flowchart TD
 - Optional CLI flag:
 
 ```bash
-securebackup upload ./file --to local:/backups --manifest-format v2
+gloak upload ./file --to local:/backups --manifest-format v2
 ```
 
 - If legacy support is kept, `verify`/`restore` should clearly report whether a backup is v1 plaintext or v2 encrypted.

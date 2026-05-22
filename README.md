@@ -1,4 +1,4 @@
-# securebackup
+# gloak
 
 > Go single-binary CLI for age-encrypted, chunked, verified backups.
 
@@ -43,7 +43,7 @@ Most backup tools either:
 3. Store metadata in plaintext — filenames, sizes, recipient keys, and chunk hashes visible to anyone who reads the storage.
 4. Pull in rclone, restic rest-server, or S3 libraries when you just need local filesystem or a mounted remote.
 
-securebackup is the boring correct version: age encryption, fixed-size chunks, deterministic manifests, integrity checks on every chunk *and* the full payload, and an encrypted manifest envelope so storage never sees filenames or hashes.
+gloak is the boring correct version: age encryption, fixed-size chunks, deterministic manifests, integrity checks on every chunk *and* the full payload, and an encrypted manifest envelope so storage never sees filenames or hashes.
 
 ---
 

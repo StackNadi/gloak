@@ -12,9 +12,9 @@ import (
 
 	"github.com/pterm/pterm"
 
-	"securebackup/internal/core"
-	"securebackup/internal/crypto"
-	"securebackup/internal/storage"
+	"gloak/internal/core"
+	"gloak/internal/crypto"
+	"gloak/internal/storage"
 )
 
 func RunRestore(backupID string, identityPath string, remote string, outputDir string) error {
@@ -50,8 +50,11 @@ func RunRestore(backupID string, identityPath string, remote string, outputDir s
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
+	if filepath.Base(manifest.OriginalName) != manifest.OriginalName {
+		return fmt.Errorf("invalid original filename in manifest: %s", manifest.OriginalName)
+	}
 	outputPath := filepath.Join(outputDir, manifest.OriginalName)
-	outFile, err := os.Create(outputPath)
+	outFile, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
 	if err != nil {
 		return fmt.Errorf("failed to create output file: %w", err)
 	}

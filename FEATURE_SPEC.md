@@ -1,13 +1,13 @@
-# Feature Spec: SecureBackup CLI
+# Feature Spec: Gloak CLI
 
 ## Summary
 
-SecureBackup is a Bun-based single-binary CLI for encrypting files with `age-encrypt`, splitting the encrypted output into fixed-size chunks, and uploading those chunks to pluggable storage backends. The primary goal is to make cloud storage safer by ensuring providers only receive encrypted chunk data, never plaintext files.
+Gloak is a Bun-based single-binary CLI for encrypting files with `age-encrypt`, splitting the encrypted output into fixed-size chunks, and uploading those chunks to pluggable storage backends. The primary goal is to make cloud storage safer by ensuring providers only receive encrypted chunk data, never plaintext files.
 
 The project root is expected to be:
 
 ```text
-~/securebackup
+~/gloak
 ```
 
 Telegram support is intentionally out of scope for the initial design.
@@ -121,34 +121,34 @@ Native provider support can come later only if there is enough demand.
 The `upload` command should not hardcode one provider. It should accept a generic destination string:
 
 ```bash
-securebackup upload ./file.zip --to <destination>
+gloak upload ./file.zip --to <destination>
 ```
 
 Examples:
 
 ```bash
-securebackup upload ./file.zip --to local:/mnt/backups
-securebackup upload ./file.zip --to s3://my-bucket/backups
-securebackup upload ./file.zip --to rclone:gdrive:/EncryptedBackups
-securebackup upload ./file.zip --to rclone:dropbox:/SecureBackups
+gloak upload ./file.zip --to local:/mnt/backups
+gloak upload ./file.zip --to s3://my-bucket/backups
+gloak upload ./file.zip --to rclone:gdrive:/EncryptedBackups
+gloak upload ./file.zip --to rclone:dropbox:/Gloaks
 ```
 
 Restore should mirror the same pattern:
 
 ```bash
-securebackup restore <backup_id> --from <destination>
+gloak restore <backup_id> --from <destination>
 ```
 
 Examples:
 
 ```bash
-securebackup restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
+gloak restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
   --from local:/mnt/backups \
   --identity ./key.txt
 ```
 
 ```bash
-securebackup restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
+gloak restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
   --from rclone:gdrive:/EncryptedBackups \
   --identity ./key.txt
 ```
@@ -195,7 +195,7 @@ Recommended MVP manifest:
   "backup_id": "7f91c6c7-7a0b-44aa-ae23-997b60e4e998",
   "created_at": "2026-05-14T00:45:00.000Z",
   "app": {
-    "name": "securebackup",
+    "name": "gloak",
     "version": "0.1.0",
     "runtime": "bun"
   },
@@ -287,13 +287,13 @@ MVP should prefer the simpler file-based interface first. Streaming can come lat
 The project root should be:
 
 ```text
-~/securebackup
+~/gloak
 ```
 
 Recommended structure:
 
 ```text
-securebackup/
+gloak/
   FEATURE_SPEC.md
   package.json
   bun.lock
@@ -330,7 +330,7 @@ securebackup/
 ### Upload
 
 ```bash
-securebackup upload ./backup.tar \
+gloak upload ./backup.tar \
   --recipient age1xxxx \
   --to local:/mnt/backups
 ```
@@ -367,7 +367,7 @@ local:/mnt/backups/7f91c6c7-7a0b-44aa-ae23-997b60e4e998
 ### Restore
 
 ```bash
-securebackup restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
+gloak restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
   --from local:/mnt/backups \
   --identity ./key.txt \
   --output ./restored/
@@ -386,7 +386,7 @@ Expected behavior:
 ### List
 
 ```bash
-securebackup list --from local:/mnt/backups
+gloak list --from local:/mnt/backups
 ```
 
 Expected behavior:
@@ -397,7 +397,7 @@ Expected behavior:
 ### Verify
 
 ```bash
-securebackup verify 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
+gloak verify 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
   --from local:/mnt/backups
 ```
 
@@ -416,7 +416,7 @@ Direct destination URIs are useful for advanced users, but named profiles improv
 Example:
 
 ```bash
-securebackup storage add rclone gdrive-backup \
+gloak storage add rclone gdrive-backup \
   --remote gdrive \
   --path /EncryptedBackups
 ```
@@ -424,8 +424,8 @@ securebackup storage add rclone gdrive-backup \
 Then:
 
 ```bash
-securebackup upload ./backup.tar --to gdrive-backup
-securebackup restore <backup_id> --from gdrive-backup --identity ./key.txt
+gloak upload ./backup.tar --to gdrive-backup
+gloak restore <backup_id> --from gdrive-backup --identity ./key.txt
 ```
 
 Possible config shape:
@@ -445,7 +445,7 @@ Possible config shape:
     "r2-main": {
       "backend": "s3",
       "bucket": "my-backups",
-      "prefix": "securebackup",
+      "prefix": "gloak",
       "endpoint": "https://example.r2.cloudflarestorage.com",
       "region": "auto"
     }
@@ -579,7 +579,7 @@ For failed uploads, the app should avoid uploading a final `manifest.json` unles
 
 ## Acceptance Criteria
 
-- [ ] Project root exists at `~/securebackup`.
+- [ ] Project root exists at `~/gloak`.
 - [ ] CLI can be built with Bun into a binary.
 - [ ] `upload` accepts an input file, recipient, and destination.
 - [ ] `upload` encrypts using `age-encrypt`.
@@ -640,7 +640,7 @@ For failed uploads, the app should avoid uploading a final `manifest.json` unles
 ## Agent Instructions
 
 - Implement only the behavior described in this spec.
-- Treat `~/securebackup` as the project root.
+- Treat `~/gloak` as the project root.
 - Keep Telegram support out of the initial implementation.
 - Do not add a web UI, server, database, or native provider integrations unless explicitly requested.
 - Start with local backend before S3 or rclone.
