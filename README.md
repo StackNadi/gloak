@@ -1,4 +1,4 @@
-# gloak
+# securebackup
 
 > Go single-binary CLI for age-encrypted, chunked, verified backups.
 
@@ -29,7 +29,7 @@ go build -o gloak .
 ./gloak verify <backup-id> --remote myremote:backup_folder -i ~/.gloak/identity.txt
 
 # restore
-./gloak restore <backup-id> --remote myremote:backup_folder --output ./restored/
+./gloak restore <backup-id> --remote myremote:backup_folder --output-dir ./restored/
 ```
 
 ---
@@ -43,7 +43,7 @@ Most backup tools either:
 3. Store metadata in plaintext — filenames, sizes, recipient keys, and chunk hashes visible to anyone who reads the storage.
 4. Pull in rclone, restic rest-server, or S3 libraries when you just need local filesystem or a mounted remote.
 
-gloak is the boring correct version: age encryption, fixed-size chunks, deterministic manifests, integrity checks on every chunk *and* the full payload, and an encrypted manifest envelope so storage never sees filenames or hashes.
+securebackup is the boring correct version: age encryption, fixed-size chunks, deterministic manifests, integrity checks on every chunk *and* the full payload, and an encrypted manifest envelope so storage never sees filenames or hashes.
 
 ---
 
@@ -88,7 +88,7 @@ Default location is `~/.gloak/`:
 Use a custom directory:
 
 ```bash
-./gloak keygen --output /path/to/keys
+./gloak keygen --output-dir /path/to/keys
 ./gloak keygen -o /path/to/keys
 ```
 
@@ -104,6 +104,21 @@ After `keygen` runs once, `-i` (identity) and `-r` (recipient) flags become opti
 ---
 
 ## Commands
+
+### `setup` — install dependencies
+
+If you don't have `rclone` installed on your system, `gloak setup` will download a standalone, verified binary to `~/.gloak/bin/rclone` so `gloak` can use it without touching your system packages.
+
+```bash
+./gloak setup
+```
+
+| Option | Alias | Description |
+|--------|-------|-------------|
+| `--dir <path>` | `-D` | Custom install directory (default: `~/.gloak/bin`). |
+| `--update` | `-u` | Force re-download even if `rclone` already exists. |
+
+---
 
 ### `upload` — full encrypted backup flow
 
@@ -161,7 +176,7 @@ CHUNK CORRUPT: Hash chunk_00042 mismatch!
 
 | Option | Description |
 |--------|-------------|
-| `-i <file>` | **Required.** Identity private key to decrypt `manifest.age`. |
+| `-i <file>` | Identity private key to decrypt `manifest.age` (defaults to `~/.gloak/identity.txt`). |
 
 ---
 
@@ -173,16 +188,16 @@ Verifies the full backup first (every chunk, every hash), then concatenates chun
 # with auto-resolved identity
 ./gloak restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
   --remote myremote:backup_folder \
-  --output ./restored/
+  --output-dir ./restored/
 
 # with explicit identity
 ./gloak restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
   --remote myremote:backup_folder \
   -i ~/.gloak/identity.txt \
-  --output ./restored/
+  --output-dir ./restored/
 ```
 
-If `--output` is a directory (trailing `/` or existing directory), gloak restores the original filename from the decrypted manifest after validating it is safe. If `--output` is a file path, it writes there directly.
+If `--output-dir` is a directory (trailing `/` or existing directory), gloak restores the original filename from the decrypted manifest after validating it is safe. If `--output-dir` is a file path, it writes there directly.
 
 Restore rejects:
 
@@ -190,6 +205,24 @@ Restore rejects:
 - Corrupted or tampered `manifest.age`
 - Unsafe filenames in the decrypted manifest (path separators, null bytes, dots only, Windows drive letters)
 - Chunks with wrong size or SHA-256
+
+---
+
+### `cleanup` — remove incomplete backups
+
+Scans the remote storage for backup directories that are missing `manifest.age` (usually caused by interrupted uploads) and offers to delete them.
+
+```bash
+# interactive prompt before deletion
+./gloak cleanup --remote myremote:backup_folder
+
+# skip prompt (useful for cron jobs)
+./gloak cleanup --remote myremote:backup_folder --yes
+```
+
+| Option | Alias | Description |
+|--------|-------|-------------|
+| `--yes` | `-y` | Skip confirmation prompt. |
 
 ---
 
@@ -245,31 +278,26 @@ Older backups may have `manifest.json` instead of `manifest.age`. Plaintext JSON
 ## Architecture
 
 ```text
-src/
-├── cli.ts                        # citty-based CLI entrypoint + command definitions
-├── commands/
-│   ├── encrypt.ts                # direct encrypt (single file or --out-dir)
-│   ├── decrypt.ts                # direct decrypt (single file or --chunks-dir)
-│   ├── upload.ts                 # full backup flow
-│   ├── verify.ts                 # backup verification + manifest loading
-│   ├── restore.ts                # backup restore with integrity checks
-│   ├── keygen.ts                 # age keypair generation
-│   ├── list.ts                   # list backups in storage
-│   └── storage.ts                # storage URI resolver
-├── core/
-│   ├── manifest.ts               # Manifest, ManifestV2 types + validation
-│   ├── manifest-crypto.ts        # encrypt/decrypt manifest with age
-│   ├── locator.ts                # PublicLocatorV2 type + validation
-│   ├── chunk.ts                  # file split/concatenation
-│   ├── paths.ts                  # chunk name, size parsing, bounds
-│   ├── ids.ts                    # UUID v4 generation + validation
-│   ├── encrypt.ts                # age-encryption wrapper
-│   ├── decrypt.ts                # age-decryption wrapper
-│   ├── checksum.ts               # SHA-256 file/bytes hashing
-│   └── resolver.ts               # key file resolution
-└── storage/
-    ├── local.ts                  # LocalStorageBackend
-    └── types.ts                  # StorageBackend interface
+├── main.go                     # CLI entrypoint
+├── setup.go                    # rclone downloader command
+├── keygen.go                   # keygen command definition
+├── upload.go                   # upload command definition
+├── verify.go                   # verify command definition
+├── restore.go                  # restore command definition
+├── cleanup.go                  # cleanup command definition
+└── internal/
+    ├── core/
+    │   ├── chunk.go            # fixed-size chunking + hashing
+    │   └── manifest.go         # Manifest types + validation
+    ├── crypto/
+    │   ├── keygen.go           # age keypair generation
+    │   └── stream.go           # streaming age encrypt/decrypt wrapper
+    ├── flow/
+    │   ├── upload.go           # upload workflow logic
+    │   ├── verify.go           # verification workflow logic
+    │   └── restore.go          # restore workflow logic
+    └── storage/
+        └── rclone.go           # Rclone backend wrapper
 ```
 
 ### Data flow
