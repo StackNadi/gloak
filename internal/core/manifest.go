@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
-	"securebackup/internal/crypto"
+	"gloak/internal/crypto"
 )
 
 type Manifest struct {

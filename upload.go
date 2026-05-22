@@ -7,7 +7,7 @@ import (
 
 	"github.com/pterm/pterm"
 
-	"securebackup/internal/flow"
+	"gloak/internal/flow"
 )
 
 type UploadCmd struct {

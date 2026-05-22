@@ -10,9 +10,9 @@ import (
 
 	"github.com/pterm/pterm"
 
-	"securebackup/internal/core"
-	"securebackup/internal/crypto"
-	"securebackup/internal/storage"
+	"gloak/internal/core"
+	"gloak/internal/crypto"
+	"gloak/internal/storage"
 )
 
 func RunVerify(backupID string, identityPath string, remote string) error {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/pterm/pterm"
 
-	"securebackup/internal/crypto"
+	"gloak/internal/crypto"
 )
 
 type KeygenCmd struct {

@@ -11,9 +11,9 @@ import (
 
 	"github.com/pterm/pterm"
 
-	"securebackup/internal/core"
-	"securebackup/internal/crypto"
-	"securebackup/internal/storage"
+	"gloak/internal/core"
+	"gloak/internal/crypto"
+	"gloak/internal/storage"
 )
 
 func RunUpload(filePath string, recipientKey string, remote string) error {

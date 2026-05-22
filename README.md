@@ -1,4 +1,4 @@
-# SecureBackup
+# gloak
 
 > Go single-binary CLI for age-encrypted, chunked, verified backups.
 
@@ -17,19 +17,19 @@ keygen → encrypt → chunk → encrypt manifest → upload → verify → rest
 go mod download
 
 # build standalone binary
-go build -o securebackup_cli .
+go build -o gloak .
 
 # generate keys
-./securebackup_cli keygen
+./gloak keygen
 
 # encrypt + upload
-./securebackup_cli upload ./secret.tar --remote myremote:backup_folder
+./gloak upload ./secret.tar --remote myremote:backup_folder
 
 # verify
-./securebackup_cli verify <backup-id> --remote myremote:backup_folder -i ~/.securebackup/identity.txt
+./gloak verify <backup-id> --remote myremote:backup_folder -i ~/.gloak/identity.txt
 
 # restore
-./securebackup_cli restore <backup-id> --remote myremote:backup_folder --output ./restored/
+./gloak restore <backup-id> --remote myremote:backup_folder --output ./restored/
 ```
 
 ---
@@ -43,7 +43,7 @@ Most backup tools either:
 3. Store metadata in plaintext — filenames, sizes, recipient keys, and chunk hashes visible to anyone who reads the storage.
 4. Pull in rclone, restic rest-server, or S3 libraries when you just need local filesystem or a mounted remote.
 
-SecureBackup is the boring correct version: age encryption, fixed-size chunks, deterministic manifests, integrity checks on every chunk *and* the full payload, and an encrypted manifest envelope so storage never sees filenames or hashes.
+gloak is the boring correct version: age encryption, fixed-size chunks, deterministic manifests, integrity checks on every chunk *and* the full payload, and an encrypted manifest envelope so storage never sees filenames or hashes.
 
 ---
 
@@ -56,10 +56,10 @@ go mod download
 Build the standalone binary:
 
 ```bash
-go build -o securebackup_cli .
+go build -o gloak .
 ```
 
-Produces `securebackup_cli` — a compiled binary. Drop it into containers, cron jobs, or VPS rootfs without needing Node, Bun, or Python installed.
+Produces `gloak` — a compiled binary. Drop it into containers, cron jobs, or VPS rootfs without needing Node, Bun, or Python installed.
 
 Run tests:
 
@@ -74,13 +74,13 @@ go test ./...
 Generate a keypair once:
 
 ```bash
-./securebackup_cli keygen
+./gloak keygen
 ```
 
-Default location is `~/.securebackup/`:
+Default location is `~/.gloak/`:
 
 ```text
-~/.securebackup/
+~/.gloak/
   identity.txt      # private key — keep this secret
   recipient.txt     # public key — safe to share
 ```
@@ -88,18 +88,18 @@ Default location is `~/.securebackup/`:
 Use a custom directory:
 
 ```bash
-./securebackup_cli keygen --output /path/to/keys
-./securebackup_cli keygen -o /path/to/keys
+./gloak keygen --output /path/to/keys
+./gloak keygen -o /path/to/keys
 ```
 
-After `keygen` runs once, `-i` (identity) and `-r` (recipient) flags become optional. SecureBackup reads from `~/.securebackup/` automatically.
+After `keygen` runs once, `-i` (identity) and `-r` (recipient) flags become optional. gloak reads from `~/.gloak/` automatically.
 
 ### Key flags
 
 | Flag | Alias | Description |
 |------|-------|-------------|
-| `-r <file>` | `--recipient` | Recipient public key file. Overrides `~/.securebackup/recipient.txt`. |
-| `-i <file>` | `--identity` | Identity private key file. Overrides `~/.securebackup/identity.txt`. |
+| `-r <file>` | `--recipient` | Recipient public key file. Overrides `~/.gloak/recipient.txt`. |
+| `-i <file>` | `--identity` | Identity private key file. Overrides `~/.gloak/identity.txt`. |
 
 ---
 
@@ -113,10 +113,10 @@ Chunks and manifest are encrypted with the same age recipient. Storage sees file
 
 ```bash
 # using auto-resolved keys
-./securebackup_cli upload ./backup.tar --remote myremote:backup_folder
+./gloak upload ./backup.tar --remote myremote:backup_folder
 
 # with explicit recipient
-./securebackup_cli upload ./backup.tar \
+./gloak upload ./backup.tar \
   -r /path/to/recipient.txt \
   --remote myremote:backup_folder
 ```
@@ -142,9 +142,9 @@ The locator is uploaded last. If the upload is interrupted, the backup directory
 Downloads and decrypts `manifest.age`, checks every chunk exists with matching size and SHA-256, then checks the concatenated encrypted payload hash against the manifest.
 
 ```bash
-./securebackup_cli verify 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
+./gloak verify 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
   --remote myremote:backup_folder \
-  -i ~/.securebackup/identity.txt
+  -i ~/.gloak/identity.txt
 ```
 
 Output on success:
@@ -171,18 +171,18 @@ Verifies the full backup first (every chunk, every hash), then concatenates chun
 
 ```bash
 # with auto-resolved identity
-./securebackup_cli restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
+./gloak restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
   --remote myremote:backup_folder \
   --output ./restored/
 
 # with explicit identity
-./securebackup_cli restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
+./gloak restore 7f91c6c7-7a0b-44aa-ae23-997b60e4e998 \
   --remote myremote:backup_folder \
-  -i ~/.securebackup/identity.txt \
+  -i ~/.gloak/identity.txt \
   --output ./restored/
 ```
 
-If `--output` is a directory (trailing `/` or existing directory), SecureBackup restores the original filename from the decrypted manifest after validating it is safe. If `--output` is a file path, it writes there directly.
+If `--output` is a directory (trailing `/` or existing directory), gloak restores the original filename from the decrypted manifest after validating it is safe. If `--output` is a file path, it writes there directly.
 
 Restore rejects:
 
@@ -212,7 +212,7 @@ Restore rejects:
 ```json
 {
   "version": 2,
-  "app": "securebackup",
+  "app": "gloak",
   "backup_id": "7f91c6c7-7a0b-44aa-ae23-997b60e4e998",
   "manifest": { "name": "manifest.age", "encryption": "age" },
   "storage": { "layout": "filesystem-v2" }

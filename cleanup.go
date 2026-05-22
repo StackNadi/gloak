@@ -7,7 +7,7 @@ import (
 
 	"github.com/pterm/pterm"
 
-	"securebackup/internal/storage"
+	"gloak/internal/storage"
 )
 
 type CleanupCmd struct {

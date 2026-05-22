@@ -1,4 +1,4 @@
-module securebackup
+module gloak
 
 go 1.26.3
 

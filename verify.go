@@ -5,12 +5,12 @@ import (
 
 	"github.com/pterm/pterm"
 
-	"securebackup/internal/flow"
+	"gloak/internal/flow"
 )
 
 type VerifyCmd struct {
 	UUID     string `arg:"" name:"uuid" help:"Backup UUID to verify."`
-	Identity string `help:"Identity private key file (defaults to ~/.securebackup/identity.txt)." short:"i"`
+	Identity string `help:"Identity private key file (defaults to ~/.gloak/identity.txt)." short:"i"`
 	Remote   string `help:"Source Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:""`
 }
 

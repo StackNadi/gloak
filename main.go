@@ -18,7 +18,7 @@ var cli struct {
 	Restore RestoreCmd `cmd:"" help:"Restore and decrypt a backup from storage."`
 	Verify  VerifyCmd  `cmd:"" help:"Verify backup chunks and checksums."`
 	Cleanup CleanupCmd `cmd:"" help:"Remove orphan backup directories missing manifest.age."`
-	Setup   SetupCmd   `cmd:"" help:"Download and install rclone to ~/.securebackup/bin/."`
+	Setup   SetupCmd   `cmd:"" help:"Download and install rclone to ~/.gloak/bin/."`
 }
 
 func getDefaultDir() string {
@@ -26,7 +26,7 @@ func getDefaultDir() string {
 	if err != nil {
 		home = "."
 	}
-	return filepath.Join(home, ".securebackup")
+	return filepath.Join(home, ".gloak")
 }
 
 func readKeyFile(path string, prefix string) (string, error) {
@@ -48,8 +48,8 @@ func main() {
 	pterm.DisableColor()
 
 	ctx := kong.Parse(&cli,
-		kong.Name("securebackup"),
-		kong.Description("SecureBackup: age-encrypted backup tool"),
+		kong.Name("gloak"),
+		kong.Description("gloak: age-encrypted backup tool"),
 		kong.UsageOnError(),
 		kong.ConfigureHelp(kong.HelpOptions{
 			Compact: true,
