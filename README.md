@@ -269,11 +269,7 @@ The locator has no sensitive metadata. No filename, no recipient, no chunk hashe
 | `chunks[].size` | Chunk byte size |
 | `chunks[].sha256` | SHA-256 of chunk content |
 
-### v1 (legacy)
 
-Older backups may have `manifest.json` instead of `manifest.age`. Plaintext JSON with the same metadata format but version `1`.
-
----
 
 ## Architecture
 
