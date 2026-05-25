@@ -333,53 +333,7 @@ restore:
 
 ---
 
-## Security model
 
-### What is protected
-
-| Threat | Mitigation |
-|--------|------------|
-| Storage reads manifest metadata | Manifest encrypted with age. Filenames, sizes, recipient keys, and chunk hashes are ciphertext. |
-| Storage tampers with manifest | Decryption fails or decrypted manifest fails validation: backup_id mismatch, unsafe filename, invalid chunk hashes, wrong chunk count, non-contiguous indexes. |
-| Path traversal in filename | Go path sanitization rejects path separators, null bytes, dots-only names, Windows drive letters. Directory traversal checks ensure the output stays under the chosen restore path. |
-| Storage replaces a chunk | SHA-256 verification catches size or content mismatch at chunk and payload level. |
-| Storage replays an old locator | Locator backup_id must match the requested backup ID. Manifest backup_id must also match after decrypt. |
-| Unauthorized upload | Upload requires an age recipient public key. Anyone who can read the recipient file can encrypt. (The recipient file is a public key — security depends on access control to it.) |
-| Duplicate backup overwrite | Upload refuses if `locator.json` or `manifest.age` already exists. |
-
-### What is NOT protected
-
-| Limitation | Explanation |
-|------------|-------------|
-| No writer provenance | Age encryption proves the encryptor knows the recipient, not who they are. A malicious storage provider with access to the recipient file could upload a fake backup that decrypts. |
-| Metadata side channels | Backup UUIDs visible in storage listings. Chunk count and sizes visible from object metadata. File size inferred from chunk count × chunk size (minus padding). |
-| In-transit encryption | Transport security is the storage backend's job. Local filesystem has none; S3/R2 would use HTTPS. |
-| Streaming memory | Encrypt/decrypt uses Go `io.Pipe`, `io.MultiWriter`, and `filippo.io/age` streams chunks directly to `rclone` standard input. Zero disk footprint for chunks, stable RAM usage under 50MB regardless of file size. |
-
-### Vulnerability audit
-
-See [`VULNERABILITIES.md`](./VULNERABILITIES.md) for the full audit of 10 findings (SB-VULN-001 through SB-VULN-010), all remediated.
-
-Current status:
-
-```text
-Audit:   govulncheck ./... — 0 known vulnerabilities
-Build:   Go 1.22+ standalone binary
-```
-
----
-
-## Design spec
-
-[`MANIFEST_AUTH_SPEC.md`](./MANIFEST_AUTH_SPEC.md) documents the encrypted manifest v2 design:
-
-- Goals and non-goals
-- Threat model
-- Storage layout
-- Validation rules (60+ invariant checks)
-- Acceptance criteria
-
----
 
 ## Not built yet
 
