@@ -11,7 +11,7 @@ import (
 type VerifyCmd struct {
 	UUID     string `arg:"" name:"uuid" help:"Backup UUID to verify."`
 	Identity string `help:"Identity private key file (defaults to ~/.gloak/identity.txt)." short:"i"`
-	Remote   string `help:"Source Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:""`
+	Remote   string `help:"Source Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:"" short:"R"`
 }
 
 func (v *VerifyCmd) Run() error {

@@ -11,7 +11,7 @@ import (
 type RestoreCmd struct {
 	UUID      string `arg:"" name:"uuid" help:"Backup UUID to restore."`
 	Identity  string `help:"Identity private key file (defaults to ~/.gloak/identity.txt)." short:"i"`
-	Remote    string `help:"Source Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:""`
+	Remote    string `help:"Source Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:"" short:"R"`
 	OutputDir string `help:"Output directory for restored file." default:"./restored" short:"o"`
 }
 

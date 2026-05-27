@@ -11,7 +11,7 @@ import (
 )
 
 type CleanupCmd struct {
-	Remote string `help:"Rclone remote URI (e.g., keraaaki:backup_folder)." required:""`
+	Remote string `help:"Rclone remote URI (e.g., keraaaki:backup_folder)." required:"" short:"R"`
 	Yes    bool   `help:"Skip confirmation prompt." short:"y"`
 }
 
