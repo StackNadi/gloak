@@ -1,6 +1,17 @@
 # gloak
 
+![Status](https://img.shields.io/badge/status-alpha-orange)
+![Version](https://img.shields.io/badge/version-v0.1.0--alpha.1-orange)
+![Go](https://img.shields.io/badge/go-1.26.3-00ADD8)
+![License](https://img.shields.io/badge/license-MIT-blue)
+
 > Go single-binary CLI for age-encrypted, chunked, verified backups.
+
+> [!WARNING]
+> gloak is alpha software (`v0.1.0-alpha.1`). Do not use it as your only backup path.
+> The storage layout, manifest format, CLI flags, and restore behavior may change without compatibility guarantees.
+>
+> Use it for testing, non-critical data, or secondary backups only. If you store anything important with gloak, keep another verified backup somewhere else.
 
 Encrypt files, split into chunks with SHA-256 checks, upload, verify, restore. Metadata (filenames, sizes, recipients, hashes) lives inside an age-encrypted manifest. Storage never sees plaintext metadata.
 
@@ -228,7 +239,7 @@ Scans the remote storage for backup directories that are missing `manifest.age` 
 
 ## Storage layout
 
-### v2 (current, default)
+### filesystem-v1 (current, alpha)
 
 ```text
 /mnt/backups/
@@ -244,11 +255,8 @@ Scans the remote storage for backup directories that are missing `manifest.age` 
 
 ```json
 {
-  "version": 2,
-  "app": "gloak",
-  "backup_id": "7f91c6c7-7a0b-44aa-ae23-997b60e4e998",
-  "manifest": { "name": "manifest.age", "encryption": "age" },
-  "storage": { "layout": "filesystem-v2" }
+  "version": "1.0",
+  "uuid": "7f91c6c7-7a0b-44aa-ae23-997b60e4e998"
 }
 ```
 
@@ -307,8 +315,8 @@ upload:
                             → upload chunks → upload manifest.age → upload locator.json
 
 verify:
-  locator.json → validate structure
-              → manifest.age → age decrypt → validate ManifestV2
+  locator.json → completion marker
+              → manifest.age → age decrypt → validate manifest
                                            → check every chunk exists
                                            → check every chunk size
                                            → check every chunk SHA-256
