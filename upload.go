@@ -13,7 +13,7 @@ import (
 type UploadCmd struct {
 	File      string `arg:"" help:"File to back up." type:"existingfile"`
 	Recipient string `help:"Recipient public key (age1...) or path to recipient.txt." short:"r"`
-	Remote    string `help:"Destination Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:""`
+	Remote    string `help:"Destination Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:"" short:"R"`
 }
 
 func (u *UploadCmd) Run() error {

@@ -155,9 +155,10 @@ Backup completed successfully!
 Save this UUID for restoration: 7f91c6c7-7a0b-44aa-ae23-997b60e4e998
 ```
 
-| Option | Default | Description |
-|--------|---------|-------------|
-| `--remote` | _required_ | Target Rclone destination (e.g. `myremote:backup_folder` or `/mnt/backups`). |
+| Option | Alias | Default | Description |
+|--------|-------|---------|-------------|
+| `--recipient <key-or-file>` | `-r` | `~/.gloak/recipient.txt` | Recipient public key or recipient file. |
+| `--remote` | `-R` | _required_ | Target Rclone destination (e.g. `myremote:backup_folder` or `/mnt/backups`). |
 
 The locator is uploaded last. If the upload is interrupted, the backup directory exists but has no `locator.json`. Upload refuses to overwrite on retry, so partial uploads never look complete.
 
@@ -185,9 +186,10 @@ On failure:
 CHUNK CORRUPT: Hash chunk_00042 mismatch!
 ```
 
-| Option | Description |
-|--------|-------------|
-| `-i <file>` | Identity private key to decrypt `manifest.age` (defaults to `~/.gloak/identity.txt`). |
+| Option | Alias | Description |
+|--------|-------|-------------|
+| `--identity <file>` | `-i` | Identity private key to decrypt `manifest.age` (defaults to `~/.gloak/identity.txt`). |
+| `--remote <uri>` | `-R` | Source Rclone destination (e.g. `myremote:backup_folder` or `/mnt/backups`). |
 
 ---
 
@@ -209,6 +211,12 @@ Verifies the full backup first (every chunk, every hash), then concatenates chun
 ```
 
 If `--output-dir` is a directory (trailing `/` or existing directory), gloak restores the original filename from the decrypted manifest after validating it is safe. If `--output-dir` is a file path, it writes there directly.
+
+| Option | Alias | Description |
+|--------|-------|-------------|
+| `--identity <file>` | `-i` | Identity private key to decrypt `manifest.age` (defaults to `~/.gloak/identity.txt`). |
+| `--remote <uri>` | `-R` | Source Rclone destination (e.g. `myremote:backup_folder` or `/mnt/backups`). |
+| `--output-dir <path>` | `-o` | Output directory or file path for restored data. |
 
 Restore rejects:
 
@@ -233,6 +241,7 @@ Scans the remote storage for backup directories that are missing `manifest.age` 
 
 | Option | Alias | Description |
 |--------|-------|-------------|
+| `--remote <uri>` | `-R` | Rclone remote URI (e.g. `myremote:backup_folder`). |
 | `--yes` | `-y` | Skip confirmation prompt. |
 
 ---
