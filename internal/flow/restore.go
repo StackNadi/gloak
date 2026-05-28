@@ -18,9 +18,11 @@ import (
 )
 
 func RunRestore(backupID string, identityPath string, remote string, outputDir string) error {
-	pterm.Info.Printf("Starting restore for UUID: %s\n", backupID)
+	return runRestore(backupID, identityPath, storage.NewRcloneBackend(remote), outputDir)
+}
 
-	backend := storage.NewRcloneBackend(remote)
+func runRestore(backupID string, identityPath string, backend storage.Backend, outputDir string) error {
+	pterm.Info.Printf("Starting restore for UUID: %s\n", backupID)
 
 	pterm.Info.Println("Downloading encrypted manifest...")
 	var manifestBuf bytes.Buffer

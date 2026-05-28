@@ -107,7 +107,7 @@ func (c *CleanupCmd) Run() error {
 	return batchDelete(backend, orphans)
 }
 
-func batchDelete(backend *storage.RcloneBackend, orphans []string) error {
+func batchDelete(backend storage.Backend, orphans []string) error {
 	// Batch delete in chunks of up to 500
 	const batchSize = 500
 	deleted := 0
