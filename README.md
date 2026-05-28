@@ -210,13 +210,13 @@ Verifies the full backup first (every chunk, every hash), then concatenates chun
   --output-dir ./restored/
 ```
 
-If `--output-dir` is a directory (trailing `/` or existing directory), gloak restores the original filename from the decrypted manifest after validating it is safe. If `--output-dir` is a file path, it writes there directly.
+`--output-dir` specifies the directory where gloak restores the backup. gloak writes the restored file using the original filename from the decrypted manifest after validating that filename is safe.
 
 | Option | Alias | Description |
 |--------|-------|-------------|
 | `--identity <file>` | `-i` | Identity private key to decrypt `manifest.age` (defaults to `~/.gloak/identity.txt`). |
 | `--remote <uri>` | `-R` | Source Rclone destination (e.g. `myremote:backup_folder` or `/mnt/backups`). |
-| `--output-dir <path>` | `-o` | Output directory or file path for restored data. |
+| `--output-dir <path>` | `-o` | Output directory for restored data. |
 
 Restore rejects:
 
