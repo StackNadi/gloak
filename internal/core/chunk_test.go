@@ -1,0 +1,81 @@
+package core
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"io"
+	"testing"
+)
+
+func TestStreamChunkerBuildsChunkMetadata(t *testing.T) {
+	payload := bytes.Repeat([]byte("a"), ChunkSize+3)
+	var uploaded [][]byte
+
+	chunks, err := StreamChunker(bytes.NewReader(payload), func(chunkReader io.Reader, index int) error {
+		data, err := io.ReadAll(chunkReader)
+		if err != nil {
+			return fmt.Errorf("read chunk %d: %w", index, err)
+		}
+		uploaded = append(uploaded, data)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("StreamChunker() returned error: %v", err)
+	}
+
+	if len(chunks) != 2 {
+		t.Fatalf("chunk count = %d, want 2", len(chunks))
+	}
+	if len(uploaded) != 2 {
+		t.Fatalf("upload call count = %d, want 2", len(uploaded))
+	}
+
+	wantSizes := []int64{ChunkSize, 3}
+	for i, chunk := range chunks {
+		if chunk.Index != i {
+			t.Fatalf("chunk %d index = %d, want %d", i, chunk.Index, i)
+		}
+		wantName := fmt.Sprintf("chunk_%05d", i)
+		if chunk.Name != wantName {
+			t.Fatalf("chunk %d name = %q, want %q", i, chunk.Name, wantName)
+		}
+		if chunk.Size != wantSizes[i] {
+			t.Fatalf("chunk %d size = %d, want %d", i, chunk.Size, wantSizes[i])
+		}
+		wantHash := sha256.Sum256(uploaded[i])
+		if chunk.SHA256 != hex.EncodeToString(wantHash[:]) {
+			t.Fatalf("chunk %d sha256 = %q, want %q", i, chunk.SHA256, hex.EncodeToString(wantHash[:]))
+		}
+	}
+}
+
+func TestStreamChunkerPropagatesUploadError(t *testing.T) {
+	wantErr := errors.New("upload failed")
+	_, err := StreamChunker(bytes.NewReader([]byte("payload")), func(io.Reader, int) error {
+		return wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("StreamChunker() error = %v, want wrapped %v", err, wantErr)
+	}
+}
+
+func TestStreamChunkerEmptyInput(t *testing.T) {
+	called := 0
+	chunks, err := StreamChunker(bytes.NewReader(nil), func(chunkReader io.Reader, index int) error {
+		called++
+		_, err := io.Copy(io.Discard, chunkReader)
+		return err
+	})
+	if err != nil {
+		t.Fatalf("StreamChunker() returned error: %v", err)
+	}
+	if len(chunks) != 0 {
+		t.Fatalf("chunk count = %d, want 0", len(chunks))
+	}
+	if called != 1 {
+		t.Fatalf("upload callback count = %d, want 1 empty read", called)
+	}
+}

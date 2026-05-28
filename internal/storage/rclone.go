@@ -13,6 +13,13 @@ type RcloneBackend struct {
 	ConfigPath string
 }
 
+type Backend interface {
+	Upload(remotePath string, in io.Reader) error
+	Download(remotePath string, out io.Writer) error
+	ListFiles(prefix []string) ([]byte, error)
+	Delete(remotePath string) error
+}
+
 func NewRcloneBackend(remote string) *RcloneBackend {
 	return &RcloneBackend{
 		Remote:     remote,

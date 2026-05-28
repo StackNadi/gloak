@@ -16,9 +16,11 @@ import (
 )
 
 func RunVerify(backupID string, identityPath string, remote string) error {
-	pterm.Info.Printf("Starting verification for UUID: %s\n", backupID)
+	return runVerify(backupID, identityPath, storage.NewRcloneBackend(remote))
+}
 
-	backend := storage.NewRcloneBackend(remote)
+func runVerify(backupID string, identityPath string, backend storage.Backend) error {
+	pterm.Info.Printf("Starting verification for UUID: %s\n", backupID)
 
 	var manifestBuf bytes.Buffer
 	err := backend.Download(fmt.Sprintf("%s/manifest.age", backupID), &manifestBuf)

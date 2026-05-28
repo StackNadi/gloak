@@ -17,6 +17,10 @@ import (
 )
 
 func RunUpload(filePath string, recipientKey string, remote string) error {
+	return runUpload(filePath, recipientKey, storage.NewRcloneBackend(remote), core.GenerateUUID())
+}
+
+func runUpload(filePath string, recipientKey string, backend storage.Backend, backupID string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
@@ -30,8 +34,6 @@ func RunUpload(filePath string, recipientKey string, remote string) error {
 	originalSize := stat.Size()
 	originalName := filepath.Base(filePath)
 
-	backend := storage.NewRcloneBackend(remote)
-	backupID := core.GenerateUUID()
 	pterm.Success.Printf("Backup ID: %s\n", backupID)
 
 	p, _ := pterm.DefaultProgressbar.
