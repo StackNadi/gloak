@@ -17,6 +17,10 @@ type ChunkMeta struct {
 }
 
 func StreamChunker(in io.Reader, uploadFn func(chunkReader io.Reader, index int) error) ([]ChunkMeta, error) {
+	return StreamChunkerWithCallback(in, uploadFn, nil)
+}
+
+func StreamChunkerWithCallback(in io.Reader, uploadFn func(chunkReader io.Reader, index int) error, afterChunkFn func(ChunkMeta) error) ([]ChunkMeta, error) {
 	var metadata []ChunkMeta
 	chunkIndex := 0
 
@@ -38,12 +42,18 @@ func StreamChunker(in io.Reader, uploadFn func(chunkReader io.Reader, index int)
 		}
 
 		hashString := hex.EncodeToString(hasher.Sum(nil))
-		metadata = append(metadata, ChunkMeta{
+		chunk := ChunkMeta{
 			Index:  chunkIndex,
 			Name:   fmt.Sprintf("chunk_%05d", chunkIndex),
 			Size:   counter.BytesRead,
 			SHA256: hashString,
-		})
+		}
+		metadata = append(metadata, chunk)
+		if afterChunkFn != nil {
+			if err := afterChunkFn(chunk); err != nil {
+				return nil, fmt.Errorf("chunk %d callback failed: %w", chunkIndex, err)
+			}
+		}
 
 		if counter.BytesRead < ChunkSize {
 			break

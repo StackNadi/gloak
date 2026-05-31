@@ -85,9 +85,91 @@ func TestVerifyRejectsCorruptChunk(t *testing.T) {
 	}
 }
 
+func TestRunUploadWithStateDeletesStateAfterSuccess(t *testing.T) {
+	pubKey, _, _, err := appcrypto.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey() returned error: %v", err)
+	}
+
+	sourcePath := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(sourcePath, []byte("payload"), 0600); err != nil {
+		t.Fatalf("failed to write source file: %v", err)
+	}
+
+	backend := newMemoryBackend()
+	stateDir := t.TempDir()
+	backupID := "7f91c6c7-7a0b-44aa-ae23-997b60e4e998"
+	if err := runUploadWithState(sourcePath, pubKey, backend, backupID, "memory:backups", stateDir); err != nil {
+		t.Fatalf("runUploadWithState() returned error: %v", err)
+	}
+
+	if _, err := os.Stat(uploadStatePath(stateDir, backupID)); !os.IsNotExist(err) {
+		t.Fatalf("upload state should be deleted after success, stat error: %v", err)
+	}
+}
+
+func TestRunUploadWithStateKeepsUploadedChunksAfterFailure(t *testing.T) {
+	pubKey, _, _, err := appcrypto.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey() returned error: %v", err)
+	}
+
+	sourcePath := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(sourcePath, []byte("payload"), 0600); err != nil {
+		t.Fatalf("failed to write source file: %v", err)
+	}
+
+	backupID := "7f91c6c7-7a0b-44aa-ae23-997b60e4e998"
+	backend := &failUploadBackend{
+		memoryBackend: newMemoryBackend(),
+		failPath:      backupID + "/manifest.age",
+	}
+	stateDir := t.TempDir()
+	err = runUploadWithState(sourcePath, pubKey, backend, backupID, "memory:backups", stateDir)
+	if err == nil {
+		t.Fatalf("runUploadWithState() succeeded despite manifest upload failure")
+	}
+	if !strings.Contains(err.Error(), "failed to upload manifest.age") {
+		t.Fatalf("runUploadWithState() error = %q, want manifest upload failure", err)
+	}
+
+	state, err := loadUploadState(stateDir, backupID)
+	if err != nil {
+		t.Fatalf("loadUploadState() returned error: %v", err)
+	}
+	if state.Remote != "memory:backups" || state.Recipient != pubKey {
+		t.Fatalf("state remote/recipient = %q/%q, want memory:backups/%q", state.Remote, state.Recipient, pubKey)
+	}
+	absSourcePath, err := filepath.Abs(sourcePath)
+	if err != nil {
+		t.Fatalf("failed to resolve source path: %v", err)
+	}
+	if state.SourcePath != absSourcePath {
+		t.Fatalf("state SourcePath = %q, want %q", state.SourcePath, absSourcePath)
+	}
+	if len(state.UploadedChunks) != 1 {
+		t.Fatalf("uploaded chunks in state = %d, want 1", len(state.UploadedChunks))
+	}
+	if state.UploadedChunks[0].Name != "chunk_00000" || state.UploadedChunks[0].Size == 0 || state.UploadedChunks[0].SHA256 == "" {
+		t.Fatalf("uploaded chunk metadata not recorded correctly: %+v", state.UploadedChunks[0])
+	}
+}
+
 type memoryBackend struct {
 	mu    sync.Mutex
 	files map[string][]byte
+}
+
+type failUploadBackend struct {
+	*memoryBackend
+	failPath string
+}
+
+func (f *failUploadBackend) Upload(remotePath string, in io.Reader) error {
+	if remotePath == f.failPath {
+		return fmt.Errorf("forced upload failure for %s", remotePath)
+	}
+	return f.memoryBackend.Upload(remotePath, in)
 }
 
 func newMemoryBackend() *memoryBackend {

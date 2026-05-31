@@ -62,6 +62,41 @@ func TestStreamChunkerPropagatesUploadError(t *testing.T) {
 	}
 }
 
+func TestStreamChunkerWithCallbackReportsChunkMetadata(t *testing.T) {
+	payload := []byte("payload")
+	var seen []ChunkMeta
+
+	chunks, err := StreamChunkerWithCallback(bytes.NewReader(payload), func(chunkReader io.Reader, index int) error {
+		_, err := io.Copy(io.Discard, chunkReader)
+		return err
+	}, func(chunk ChunkMeta) error {
+		seen = append(seen, chunk)
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("StreamChunkerWithCallback() returned error: %v", err)
+	}
+	if len(chunks) != 1 || len(seen) != 1 {
+		t.Fatalf("chunks = %d, callback chunks = %d, want 1 and 1", len(chunks), len(seen))
+	}
+	if seen[0] != chunks[0] {
+		t.Fatalf("callback chunk = %+v, want %+v", seen[0], chunks[0])
+	}
+}
+
+func TestStreamChunkerWithCallbackPropagatesCallbackError(t *testing.T) {
+	wantErr := errors.New("save state failed")
+	_, err := StreamChunkerWithCallback(bytes.NewReader([]byte("payload")), func(chunkReader io.Reader, index int) error {
+		_, err := io.Copy(io.Discard, chunkReader)
+		return err
+	}, func(ChunkMeta) error {
+		return wantErr
+	})
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("StreamChunkerWithCallback() error = %v, want wrapped %v", err, wantErr)
+	}
+}
+
 func TestStreamChunkerEmptyInput(t *testing.T) {
 	called := 0
 	chunks, err := StreamChunker(bytes.NewReader(nil), func(chunkReader io.Reader, index int) error {

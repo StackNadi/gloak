@@ -46,6 +46,14 @@ func uploadStatePath(stateDir string, backupID string) string {
 	return filepath.Join(stateDir, backupID+".json")
 }
 
+func defaultUploadStateDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		home = "."
+	}
+	return filepath.Join(home, ".gloak", "uploads")
+}
+
 func saveUploadState(stateDir string, state UploadState) error {
 	if err := os.MkdirAll(stateDir, 0700); err != nil {
 		return fmt.Errorf("failed to create upload state directory: %w", err)

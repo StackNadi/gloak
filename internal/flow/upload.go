@@ -17,10 +17,14 @@ import (
 )
 
 func RunUpload(filePath string, recipientKey string, remote string) error {
-	return runUpload(filePath, recipientKey, storage.NewRcloneBackend(remote), core.GenerateUUID())
+	return runUploadWithState(filePath, recipientKey, storage.NewRcloneBackend(remote), core.GenerateUUID(), remote, defaultUploadStateDir())
 }
 
 func runUpload(filePath string, recipientKey string, backend storage.Backend, backupID string) error {
+	return runUploadWithState(filePath, recipientKey, backend, backupID, "", "")
+}
+
+func runUploadWithState(filePath string, recipientKey string, backend storage.Backend, backupID string, remote string, stateDir string) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
@@ -33,6 +37,17 @@ func runUpload(filePath string, recipientKey string, backend storage.Backend, ba
 	}
 	originalSize := stat.Size()
 	originalName := filepath.Base(filePath)
+	state := UploadState{}
+	if stateDir != "" {
+		absPath, err := filepath.Abs(filePath)
+		if err != nil {
+			return fmt.Errorf("failed to resolve source path: %w", err)
+		}
+		state = NewUploadState(backupID, absPath, originalName, originalSize, remote, recipientKey)
+		if err := saveUploadState(stateDir, state); err != nil {
+			return err
+		}
+	}
 
 	pterm.Success.Printf("Backup ID: %s\n", backupID)
 
@@ -65,11 +80,17 @@ func runUpload(filePath string, recipientKey string, backend storage.Backend, ba
 	overallHasher := sha256.New()
 	tee := io.TeeReader(pr, overallHasher)
 
-	chunksMeta, err := core.StreamChunker(tee, func(chunkReader io.Reader, index int) error {
+	chunksMeta, err := core.StreamChunkerWithCallback(tee, func(chunkReader io.Reader, index int) error {
 		chunkName := fmt.Sprintf("chunk_%05d", index)
 		remotePath := fmt.Sprintf("%s/%s", backupID, chunkName)
 
 		return backend.Upload(remotePath, chunkReader)
+	}, func(chunk core.ChunkMeta) error {
+		if stateDir == "" {
+			return nil
+		}
+		state.UploadedChunks = append(state.UploadedChunks, chunk)
+		return saveUploadState(stateDir, state)
 	})
 
 	if err != nil {
@@ -98,6 +119,11 @@ func runUpload(filePath string, recipientKey string, backend storage.Backend, ba
 	err = backend.Upload(fmt.Sprintf("%s/locator.json", backupID), bytes.NewReader(locatorBytes))
 	if err != nil {
 		return fmt.Errorf("failed to upload locator.json: %w", err)
+	}
+	if stateDir != "" {
+		if err := deleteUploadState(stateDir, backupID); err != nil {
+			return fmt.Errorf("backup completed but failed to delete upload state: %w", err)
+		}
 	}
 
 	pterm.Success.Println("Backup completed successfully!")
