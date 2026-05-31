@@ -27,7 +27,7 @@ type UploadState struct {
 }
 
 func NewUploadState(backupID string, sourcePath string, originalName string, originalSize int64, remote string, recipient string) UploadState {
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := uploadStateTimestamp()
 	return UploadState{
 		Version:      uploadStateVersion,
 		BackupID:     backupID,
@@ -51,7 +51,7 @@ func saveUploadState(stateDir string, state UploadState) error {
 		return fmt.Errorf("failed to create upload state directory: %w", err)
 	}
 
-	state.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	state.UpdatedAt = uploadStateTimestamp()
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to encode upload state: %w", err)
@@ -90,4 +90,8 @@ func deleteUploadState(stateDir string, backupID string) error {
 	}
 
 	return nil
+}
+
+func uploadStateTimestamp() string {
+	return time.Now().UTC().Format(time.RFC3339Nano)
 }

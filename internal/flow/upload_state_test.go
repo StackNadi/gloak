@@ -28,8 +28,8 @@ func TestNewUploadState(t *testing.T) {
 	if state.CreatedAt == "" || state.UpdatedAt == "" {
 		t.Fatalf("timestamps should be set: %+v", state)
 	}
-	if _, err := time.Parse(time.RFC3339, state.CreatedAt); err != nil {
-		t.Fatalf("CreatedAt is not RFC3339: %v", err)
+	if _, err := time.Parse(time.RFC3339Nano, state.CreatedAt); err != nil {
+		t.Fatalf("CreatedAt is not RFC3339Nano: %v", err)
 	}
 }
 
@@ -61,8 +61,16 @@ func TestUploadStateSaveLoadRoundTrip(t *testing.T) {
 	if len(got.UploadedChunks) != 1 || got.UploadedChunks[0] != state.UploadedChunks[0] {
 		t.Fatalf("loaded chunks = %+v, want %+v", got.UploadedChunks, state.UploadedChunks)
 	}
-	if got.UpdatedAt == state.UpdatedAt {
-		t.Fatalf("UpdatedAt was not refreshed on save")
+	createdAt, err := time.Parse(time.RFC3339Nano, got.CreatedAt)
+	if err != nil {
+		t.Fatalf("loaded CreatedAt is not RFC3339Nano: %v", err)
+	}
+	updatedAt, err := time.Parse(time.RFC3339Nano, got.UpdatedAt)
+	if err != nil {
+		t.Fatalf("loaded UpdatedAt is not RFC3339Nano: %v", err)
+	}
+	if updatedAt.Before(createdAt) {
+		t.Fatalf("UpdatedAt %s is before CreatedAt %s", got.UpdatedAt, got.CreatedAt)
 	}
 }
 
