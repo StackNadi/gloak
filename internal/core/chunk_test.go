@@ -43,12 +43,12 @@ func TestStreamChunkerBuildsChunkMetadata(t *testing.T) {
 		if chunk.Name != wantName {
 			t.Fatalf("chunk %d name = %q, want %q", i, chunk.Name, wantName)
 		}
-		if chunk.Size != wantSizes[i] {
-			t.Fatalf("chunk %d size = %d, want %d", i, chunk.Size, wantSizes[i])
+		if chunk.PlainSize != wantSizes[i] {
+			t.Fatalf("chunk %d size = %d, want %d", i, chunk.PlainSize, wantSizes[i])
 		}
 		wantHash := sha256.Sum256(uploaded[i])
-		if chunk.SHA256 != hex.EncodeToString(wantHash[:]) {
-			t.Fatalf("chunk %d sha256 = %q, want %q", i, chunk.SHA256, hex.EncodeToString(wantHash[:]))
+		if chunk.PlainSHA256 != hex.EncodeToString(wantHash[:]) {
+			t.Fatalf("chunk %d sha256 = %q, want %q", i, chunk.PlainSHA256, hex.EncodeToString(wantHash[:]))
 		}
 	}
 }
@@ -112,8 +112,8 @@ func TestStreamChunkerWithSizeUsesCustomChunkSize(t *testing.T) {
 		t.Fatalf("chunk count = %d, want %d", len(chunks), len(wantSizes))
 	}
 	for i, chunk := range chunks {
-		if chunk.Size != wantSizes[i] {
-			t.Fatalf("chunk %d size = %d, want %d", i, chunk.Size, wantSizes[i])
+		if chunk.PlainSize != wantSizes[i] {
+			t.Fatalf("chunk %d size = %d, want %d", i, chunk.PlainSize, wantSizes[i])
 		}
 	}
 }

@@ -10,10 +10,12 @@ import (
 const ChunkSize = 20 * 1024 * 1024
 
 type ChunkMeta struct {
-	Index  int    `json:"index"`
-	Name   string `json:"name"`
-	Size   int64  `json:"size"`
-	SHA256 string `json:"sha256"`
+	Index           int    `json:"index"`
+	Name            string `json:"name"`
+	PlainSize       int64  `json:"plain_size"`
+	PlainSHA256     string `json:"plain_sha256"`
+	EncryptedSize   int64  `json:"encrypted_size"`
+	EncryptedSHA256 string `json:"encrypted_sha256"`
 }
 
 func StreamChunker(in io.Reader, uploadFn func(chunkReader io.Reader, index int) error) ([]ChunkMeta, error) {
@@ -51,10 +53,10 @@ func StreamChunkerWithSize(in io.Reader, chunkSize int64, uploadFn func(chunkRea
 
 		hashString := hex.EncodeToString(hasher.Sum(nil))
 		chunk := ChunkMeta{
-			Index:  chunkIndex,
-			Name:   fmt.Sprintf("chunk_%05d", chunkIndex),
-			Size:   counter.BytesRead,
-			SHA256: hashString,
+			Index:       chunkIndex,
+			Name:        fmt.Sprintf("chunk_%05d", chunkIndex),
+			PlainSize:   counter.BytesRead,
+			PlainSHA256: hashString,
 		}
 		metadata = append(metadata, chunk)
 		if afterChunkFn != nil {

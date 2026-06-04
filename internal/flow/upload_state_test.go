@@ -36,7 +36,7 @@ func TestNewUploadState(t *testing.T) {
 func TestUploadStateSaveLoadRoundTrip(t *testing.T) {
 	stateDir := t.TempDir()
 	state := NewUploadState("backup-id", "/tmp/secret.tar", "secret.tar", 123, "remote:path", "age1recipient")
-	state.UploadedChunks = []core.ChunkMeta{{Index: 0, Name: "chunk_00000", Size: 10, SHA256: "abc"}}
+	state.UploadedChunks = []core.ChunkMeta{{Index: 0, Name: "chunk_00000", PlainSize: 10, PlainSHA256: "plain", EncryptedSize: 12, EncryptedSHA256: "encrypted"}}
 
 	if err := saveUploadState(stateDir, state); err != nil {
 		t.Fatalf("saveUploadState() returned error: %v", err)

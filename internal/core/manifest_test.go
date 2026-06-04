@@ -12,7 +12,7 @@ import (
 )
 
 func TestCreateManifestAndLocatorVersions(t *testing.T) {
-	chunks := []ChunkMeta{{Index: 0, Name: "chunk_00000", Size: 10, SHA256: "abc"}}
+	chunks := []ChunkMeta{{Index: 0, Name: "chunk_00000", PlainSize: 10, PlainSHA256: "plain", EncryptedSize: 12, EncryptedSHA256: "encrypted"}}
 	manifest := CreateManifest("backup-id", "secret.tar", 123, "age1example", "payload-hash", chunks)
 
 	if manifest.Version != "1.0" {
@@ -78,7 +78,7 @@ func TestEncryptManifestCanBeDecrypted(t *testing.T) {
 	if err := json.Unmarshal(plain, &got); err != nil {
 		t.Fatalf("decrypted manifest is not valid JSON: %v", err)
 	}
-	if got.UUID != manifest.UUID || got.OriginalName != manifest.OriginalName || got.PayloadEncryptedHash != manifest.PayloadEncryptedHash {
+	if got.UUID != manifest.UUID || got.OriginalName != manifest.OriginalName || got.PayloadSHA256 != manifest.PayloadSHA256 {
 		t.Fatalf("decrypted manifest = %+v, want %+v", got, manifest)
 	}
 }

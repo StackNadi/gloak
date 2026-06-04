@@ -1,0 +1,89 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="250" viewBox="0 0 720 250" role="img" aria-labelledby="title desc">
+  <title id="title">GLOAK</title>
+  <desc id="desc">A transparent pixel-block GLOAK banner with Go-blue letters and a thin frame.</desc>
+
+  <defs>
+    <linearGradient id="go-blue" gradientUnits="userSpaceOnUse" x1="0" y1="38" x2="0" y2="178">
+      <stop offset="0" stop-color="#35c9ef"/>
+      <stop offset="0.31" stop-color="#35c9ef"/>
+      <stop offset="0.32" stop-color="#008fbe"/>
+      <stop offset="0.65" stop-color="#008fbe"/>
+      <stop offset="0.66" stop-color="#004f68"/>
+      <stop offset="1" stop-color="#004f68"/>
+    </linearGradient>
+
+    <rect id="px" width="20" height="20"/>
+
+    <g id="g-letter">
+      <use href="#px" x="0" y="0"/><use href="#px" x="20" y="0"/><use href="#px" x="40" y="0"/><use href="#px" x="60" y="0"/><use href="#px" x="80" y="0"/>
+      <use href="#px" x="0" y="20"/>
+      <use href="#px" x="0" y="40"/>
+      <use href="#px" x="0" y="60"/><use href="#px" x="40" y="60"/><use href="#px" x="60" y="60"/><use href="#px" x="80" y="60"/>
+      <use href="#px" x="0" y="80"/><use href="#px" x="80" y="80"/>
+      <use href="#px" x="0" y="100"/><use href="#px" x="80" y="100"/>
+      <use href="#px" x="0" y="120"/><use href="#px" x="20" y="120"/><use href="#px" x="40" y="120"/><use href="#px" x="60" y="120"/><use href="#px" x="80" y="120"/>
+    </g>
+
+    <g id="l-letter">
+      <use href="#px" x="0" y="0"/>
+      <use href="#px" x="0" y="20"/>
+      <use href="#px" x="0" y="40"/>
+      <use href="#px" x="0" y="60"/>
+      <use href="#px" x="0" y="80"/>
+      <use href="#px" x="0" y="100"/>
+      <use href="#px" x="0" y="120"/><use href="#px" x="20" y="120"/><use href="#px" x="40" y="120"/><use href="#px" x="60" y="120"/><use href="#px" x="80" y="120"/>
+    </g>
+
+    <g id="o-letter">
+      <use href="#px" x="0" y="0"/><use href="#px" x="20" y="0"/><use href="#px" x="40" y="0"/><use href="#px" x="60" y="0"/><use href="#px" x="80" y="0"/>
+      <use href="#px" x="0" y="20"/><use href="#px" x="80" y="20"/>
+      <use href="#px" x="0" y="40"/><use href="#px" x="80" y="40"/>
+      <use href="#px" x="0" y="60"/><use href="#px" x="80" y="60"/>
+      <use href="#px" x="0" y="80"/><use href="#px" x="80" y="80"/>
+      <use href="#px" x="0" y="100"/><use href="#px" x="80" y="100"/>
+      <use href="#px" x="0" y="120"/><use href="#px" x="20" y="120"/><use href="#px" x="40" y="120"/><use href="#px" x="60" y="120"/><use href="#px" x="80" y="120"/>
+    </g>
+
+    <g id="a-letter">
+      <use href="#px" x="20" y="0"/><use href="#px" x="40" y="0"/><use href="#px" x="60" y="0"/>
+      <use href="#px" x="0" y="20"/><use href="#px" x="80" y="20"/>
+      <use href="#px" x="0" y="40"/><use href="#px" x="80" y="40"/>
+      <use href="#px" x="0" y="60"/><use href="#px" x="20" y="60"/><use href="#px" x="40" y="60"/><use href="#px" x="60" y="60"/><use href="#px" x="80" y="60"/>
+      <use href="#px" x="0" y="80"/><use href="#px" x="80" y="80"/>
+      <use href="#px" x="0" y="100"/><use href="#px" x="80" y="100"/>
+      <use href="#px" x="0" y="120"/><use href="#px" x="80" y="120"/>
+    </g>
+
+    <g id="k-letter">
+      <use href="#px" x="0" y="0"/><use href="#px" x="80" y="0"/>
+      <use href="#px" x="0" y="20"/><use href="#px" x="60" y="20"/>
+      <use href="#px" x="0" y="40"/><use href="#px" x="40" y="40"/>
+      <use href="#px" x="0" y="60"/><use href="#px" x="20" y="60"/>
+      <use href="#px" x="0" y="80"/><use href="#px" x="40" y="80"/>
+      <use href="#px" x="0" y="100"/><use href="#px" x="60" y="100"/>
+      <use href="#px" x="0" y="120"/><use href="#px" x="80" y="120"/>
+    </g>
+
+    <g id="word">
+      <use href="#g-letter" x="0" y="0"/>
+      <use href="#l-letter" x="120" y="0"/>
+      <use href="#o-letter" x="240" y="0"/>
+      <use href="#a-letter" x="360" y="0"/>
+      <use href="#k-letter" x="480" y="0"/>
+    </g>
+
+    <mask id="word-fill-mask" maskUnits="userSpaceOnUse" x="54" y="38" width="580" height="140">
+      <use href="#word" x="54" y="38" fill="#fff"/>
+    </mask>
+  </defs>
+
+  <rect x="16" y="16" width="688" height="218" fill="none" stroke="#17313a" stroke-width="2"/>
+
+  <use href="#word" x="86" y="68" fill="#3a1f17" opacity="0.82"/>
+  <use href="#word" x="76" y="58" fill="#6f3a24" opacity="0.68"/>
+  <use href="#word" x="64" y="48" fill="#005f73"/>
+  <use href="#word" x="54" y="38" fill="#031014"/>
+  <use href="#word" x="54" y="38" fill="none" stroke="#031014" stroke-width="4"/>
+  <rect x="54" y="38" width="580" height="140" fill="url(#go-blue)" mask="url(#word-fill-mask)"/>
+  <use href="#word" x="54" y="38" fill="none" stroke="#b8f3ff" stroke-width="1.5" opacity="0.82"/>
+</svg>

@@ -55,27 +55,49 @@ func runVerify(backupID string, identityPath string, backend storage.Backend) er
 	payloadHasher := sha256.New()
 
 	for _, chunk := range manifest.Chunks {
-		chunkHasher := sha256.New()
-
-		multiWriter := io.MultiWriter(chunkHasher, payloadHasher)
-
-		err := backend.Download(fmt.Sprintf("%s/%s", backupID, chunk.Name), multiWriter)
+		var encryptedChunk bytes.Buffer
+		err := backend.Download(fmt.Sprintf("%s/%s", backupID, chunk.Name), &encryptedChunk)
 		if err != nil {
 			p.Stop()
 			return fmt.Errorf("failed to download chunk %s: %w", chunk.Name, err)
 		}
 
-		if hex.EncodeToString(chunkHasher.Sum(nil)) != chunk.SHA256 {
+		encryptedBytes := encryptedChunk.Bytes()
+		if int64(len(encryptedBytes)) != chunk.EncryptedSize {
+			p.Stop()
+			return fmt.Errorf("CHUNK CORRUPT: Size %s mismatch!", chunk.Name)
+		}
+		if hashBytes(encryptedBytes) != chunk.EncryptedSHA256 {
 			p.Stop()
 			return fmt.Errorf("CHUNK CORRUPT: Hash %s mismatch!", chunk.Name)
 		}
+
+		plainReader, err := crypto.DecryptReader(identityPath, bytes.NewReader(encryptedBytes))
+		if err != nil {
+			p.Stop()
+			return fmt.Errorf("failed to decrypt chunk %s: %w", chunk.Name, err)
+		}
+		plainBytes, err := io.ReadAll(plainReader)
+		if err != nil {
+			p.Stop()
+			return fmt.Errorf("failed to read decrypted chunk %s: %w", chunk.Name, err)
+		}
+		if int64(len(plainBytes)) != chunk.PlainSize {
+			p.Stop()
+			return fmt.Errorf("CHUNK CORRUPT: Plain size %s mismatch!", chunk.Name)
+		}
+		if hashBytes(plainBytes) != chunk.PlainSHA256 {
+			p.Stop()
+			return fmt.Errorf("CHUNK CORRUPT: Plain hash %s mismatch!", chunk.Name)
+		}
+		payloadHasher.Write(plainBytes)
 
 		p.Add(1)
 	}
 
 	p.Stop()
 
-	if hex.EncodeToString(payloadHasher.Sum(nil)) != manifest.PayloadEncryptedHash {
+	if hex.EncodeToString(payloadHasher.Sum(nil)) != manifest.PayloadSHA256 {
 		return fmt.Errorf("FATAL: Overall payload hash differs from manifest! Data has been modified")
 	}
 
