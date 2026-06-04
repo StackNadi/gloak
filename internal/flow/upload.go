@@ -17,7 +17,7 @@ import (
 )
 
 func RunUpload(filePath string, recipientKey string, remote string) error {
-	return runUploadWithState(filePath, recipientKey, storage.NewRcloneBackend(remote), core.GenerateUUID(), remote, defaultUploadStateDir())
+	return runUploadWithStateAndChunkSize(filePath, recipientKey, storage.NewRcloneBackend(remote), core.GenerateUUID(), remote, defaultUploadStateDir(), core.ChunkSize)
 }
 
 func runUpload(filePath string, recipientKey string, backend storage.Backend, backupID string) error {
@@ -25,6 +25,10 @@ func runUpload(filePath string, recipientKey string, backend storage.Backend, ba
 }
 
 func runUploadWithState(filePath string, recipientKey string, backend storage.Backend, backupID string, remote string, stateDir string) error {
+	return runUploadWithStateAndChunkSize(filePath, recipientKey, backend, backupID, remote, stateDir, core.ChunkSize)
+}
+
+func runUploadWithStateAndChunkSize(filePath string, recipientKey string, backend storage.Backend, backupID string, remote string, stateDir string, chunkSize int64) error {
 	file, err := os.Open(filePath)
 	if err != nil {
 		return fmt.Errorf("failed to open source file: %w", err)
@@ -43,7 +47,7 @@ func runUploadWithState(filePath string, recipientKey string, backend storage.Ba
 		if err != nil {
 			return fmt.Errorf("failed to resolve source path: %w", err)
 		}
-		state = NewUploadState(backupID, absPath, originalName, originalSize, remote, recipientKey)
+		state = newUploadStateWithChunkSize(backupID, absPath, originalName, originalSize, remote, recipientKey, chunkSize)
 		if err := saveUploadState(stateDir, state); err != nil {
 			return err
 		}
@@ -80,7 +84,7 @@ func runUploadWithState(filePath string, recipientKey string, backend storage.Ba
 	overallHasher := sha256.New()
 	tee := io.TeeReader(pr, overallHasher)
 
-	chunksMeta, err := core.StreamChunkerWithCallback(tee, func(chunkReader io.Reader, index int) error {
+	chunksMeta, err := core.StreamChunkerWithSize(tee, chunkSize, func(chunkReader io.Reader, index int) error {
 		chunkName := fmt.Sprintf("chunk_%05d", index)
 		remotePath := fmt.Sprintf("%s/%s", backupID, chunkName)
 

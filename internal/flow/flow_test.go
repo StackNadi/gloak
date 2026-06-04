@@ -155,6 +155,55 @@ func TestRunUploadWithStateKeepsUploadedChunksAfterFailure(t *testing.T) {
 	}
 }
 
+func TestRunUploadWithStateStopsAtMidUploadFailure(t *testing.T) {
+	pubKey, _, _, err := appcrypto.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey() returned error: %v", err)
+	}
+
+	sourcePath := filepath.Join(t.TempDir(), "secret.txt")
+	if err := os.WriteFile(sourcePath, []byte("payload large enough for several encrypted chunks"), 0600); err != nil {
+		t.Fatalf("failed to write source file: %v", err)
+	}
+
+	backupID := "7f91c6c7-7a0b-44aa-ae23-997b60e4e998"
+	backend := &failUploadBackend{
+		memoryBackend: newMemoryBackend(),
+		failPath:      backupID + "/chunk_00001",
+	}
+	stateDir := t.TempDir()
+	err = runUploadWithStateAndChunkSize(sourcePath, pubKey, backend, backupID, "memory:backups", stateDir, 8)
+	if err == nil {
+		t.Fatalf("runUploadWithStateAndChunkSize() succeeded despite chunk upload failure")
+	}
+	if !strings.Contains(err.Error(), "chunk 1 failed to process") {
+		t.Fatalf("runUploadWithStateAndChunkSize() error = %q, want chunk 1 failure", err)
+	}
+
+	state, err := loadUploadState(stateDir, backupID)
+	if err != nil {
+		t.Fatalf("loadUploadState() returned error: %v", err)
+	}
+	if state.ChunkSize != 8 {
+		t.Fatalf("state ChunkSize = %d, want 8", state.ChunkSize)
+	}
+	if len(state.UploadedChunks) != 1 {
+		t.Fatalf("uploaded chunks in state = %d, want 1", len(state.UploadedChunks))
+	}
+	if state.UploadedChunks[0].Name != "chunk_00000" {
+		t.Fatalf("recorded chunk = %q, want chunk_00000", state.UploadedChunks[0].Name)
+	}
+
+	if !backend.has(backupID + "/chunk_00000") {
+		t.Fatalf("chunk_00000 should exist after first chunk upload")
+	}
+	for _, path := range []string{backupID + "/chunk_00001", backupID + "/manifest.age", backupID + "/locator.json"} {
+		if backend.has(path) {
+			t.Fatalf("%s should not exist after mid-upload failure", path)
+		}
+	}
+}
+
 type memoryBackend struct {
 	mu    sync.Mutex
 	files map[string][]byte
@@ -167,6 +216,7 @@ type failUploadBackend struct {
 
 func (f *failUploadBackend) Upload(remotePath string, in io.Reader) error {
 	if remotePath == f.failPath {
+		_, _ = io.Copy(io.Discard, in)
 		return fmt.Errorf("forced upload failure for %s", remotePath)
 	}
 	return f.memoryBackend.Upload(remotePath, in)

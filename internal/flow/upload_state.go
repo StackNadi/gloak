@@ -27,6 +27,10 @@ type UploadState struct {
 }
 
 func NewUploadState(backupID string, sourcePath string, originalName string, originalSize int64, remote string, recipient string) UploadState {
+	return newUploadStateWithChunkSize(backupID, sourcePath, originalName, originalSize, remote, recipient, core.ChunkSize)
+}
+
+func newUploadStateWithChunkSize(backupID string, sourcePath string, originalName string, originalSize int64, remote string, recipient string, chunkSize int64) UploadState {
 	now := uploadStateTimestamp()
 	return UploadState{
 		Version:      uploadStateVersion,
@@ -36,7 +40,7 @@ func NewUploadState(backupID string, sourcePath string, originalName string, ori
 		OriginalSize: originalSize,
 		Remote:       remote,
 		Recipient:    recipient,
-		ChunkSize:    core.ChunkSize,
+		ChunkSize:    chunkSize,
 		CreatedAt:    now,
 		UpdatedAt:    now,
 	}

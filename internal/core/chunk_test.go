@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"testing"
 )
 
@@ -94,6 +95,38 @@ func TestStreamChunkerWithCallbackPropagatesCallbackError(t *testing.T) {
 	})
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("StreamChunkerWithCallback() error = %v, want wrapped %v", err, wantErr)
+	}
+}
+
+func TestStreamChunkerWithSizeUsesCustomChunkSize(t *testing.T) {
+	chunks, err := StreamChunkerWithSize(bytes.NewReader([]byte("abcdefghij")), 4, func(chunkReader io.Reader, index int) error {
+		_, err := io.Copy(io.Discard, chunkReader)
+		return err
+	}, nil)
+	if err != nil {
+		t.Fatalf("StreamChunkerWithSize() returned error: %v", err)
+	}
+
+	wantSizes := []int64{4, 4, 2}
+	if len(chunks) != len(wantSizes) {
+		t.Fatalf("chunk count = %d, want %d", len(chunks), len(wantSizes))
+	}
+	for i, chunk := range chunks {
+		if chunk.Size != wantSizes[i] {
+			t.Fatalf("chunk %d size = %d, want %d", i, chunk.Size, wantSizes[i])
+		}
+	}
+}
+
+func TestStreamChunkerWithSizeRejectsInvalidChunkSize(t *testing.T) {
+	_, err := StreamChunkerWithSize(bytes.NewReader([]byte("payload")), 0, func(io.Reader, int) error {
+		return nil
+	}, nil)
+	if err == nil {
+		t.Fatalf("StreamChunkerWithSize() succeeded with zero chunk size")
+	}
+	if !strings.Contains(err.Error(), "chunk size must be positive") {
+		t.Fatalf("StreamChunkerWithSize() error = %q, want chunk size error", err)
 	}
 }
 

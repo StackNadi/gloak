@@ -21,11 +21,19 @@ func StreamChunker(in io.Reader, uploadFn func(chunkReader io.Reader, index int)
 }
 
 func StreamChunkerWithCallback(in io.Reader, uploadFn func(chunkReader io.Reader, index int) error, afterChunkFn func(ChunkMeta) error) ([]ChunkMeta, error) {
+	return StreamChunkerWithSize(in, ChunkSize, uploadFn, afterChunkFn)
+}
+
+func StreamChunkerWithSize(in io.Reader, chunkSize int64, uploadFn func(chunkReader io.Reader, index int) error, afterChunkFn func(ChunkMeta) error) ([]ChunkMeta, error) {
+	if chunkSize <= 0 {
+		return nil, fmt.Errorf("chunk size must be positive")
+	}
+
 	var metadata []ChunkMeta
 	chunkIndex := 0
 
 	for {
-		limitedReader := io.LimitReader(in, ChunkSize)
+		limitedReader := io.LimitReader(in, chunkSize)
 
 		hasher := sha256.New()
 		tee := io.TeeReader(limitedReader, hasher)
@@ -55,7 +63,7 @@ func StreamChunkerWithCallback(in io.Reader, uploadFn func(chunkReader io.Reader
 			}
 		}
 
-		if counter.BytesRead < ChunkSize {
+		if counter.BytesRead < chunkSize {
 			break
 		}
 
