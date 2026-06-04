@@ -12,14 +12,14 @@ import (
 )
 
 type Manifest struct {
-	Version              string      `json:"version"`
-	UUID                 string      `json:"uuid"`
-	OriginalName         string      `json:"original_name"`
-	OriginalSize         int64       `json:"original_size"`
-	CreatedAt            string      `json:"created_at"`
-	Recipient            string      `json:"recipient"`
-	PayloadEncryptedHash string      `json:"payload_encrypted_hash"`
-	Chunks               []ChunkMeta `json:"chunks"`
+	Version       string      `json:"version"`
+	UUID          string      `json:"uuid"`
+	OriginalName  string      `json:"original_name"`
+	OriginalSize  int64       `json:"original_size"`
+	CreatedAt     string      `json:"created_at"`
+	Recipient     string      `json:"recipient"`
+	PayloadSHA256 string      `json:"payload_sha256"`
+	Chunks        []ChunkMeta `json:"chunks"`
 }
 
 type Locator struct {
@@ -33,14 +33,14 @@ func GenerateUUID() string {
 
 func CreateManifest(id string, filename string, size int64, recipient string, payloadHash string, chunks []ChunkMeta) Manifest {
 	return Manifest{
-		Version:              "1.0",
-		UUID:                 id,
-		OriginalName:         filename,
-		OriginalSize:         size,
-		CreatedAt:            time.Now().UTC().Format(time.RFC3339),
-		Recipient:            recipient,
-		PayloadEncryptedHash: payloadHash,
-		Chunks:               chunks,
+		Version:       "1.0",
+		UUID:          id,
+		OriginalName:  filename,
+		OriginalSize:  size,
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		Recipient:     recipient,
+		PayloadSHA256: payloadHash,
+		Chunks:        chunks,
 	}
 }
 

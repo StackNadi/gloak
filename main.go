@@ -15,6 +15,7 @@ var cli struct {
 
 	Keygen  KeygenCmd  `cmd:"" help:"Generate an X25519 identity and recipient file."`
 	Upload  UploadCmd  `cmd:"" help:"Encrypt, chunk, and upload a file to a storage destination."`
+	Resume  ResumeCmd  `cmd:"" help:"Validate saved state for an interrupted upload."`
 	Restore RestoreCmd `cmd:"" help:"Restore and decrypt a backup from storage."`
 	Verify  VerifyCmd  `cmd:"" help:"Verify backup chunks and checksums."`
 	Cleanup CleanupCmd `cmd:"" help:"Remove orphan backup directories missing manifest.age."`

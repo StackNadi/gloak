@@ -68,47 +68,53 @@ func runRestore(backupID string, identityPath string, backend storage.Backend, o
 		WithRemoveWhenDone(false).
 		Start()
 
-	pr, pw := io.Pipe()
-
-	go func() {
-		defer pw.Close()
-		payloadHasher := sha256.New()
-
-		for _, chunk := range manifest.Chunks {
-
-			chunkHasher := sha256.New()
-			multiWriter := io.MultiWriter(pw, chunkHasher, payloadHasher)
-
-			err := backend.Download(fmt.Sprintf("%s/%s", backupID, chunk.Name), multiWriter)
-			if err != nil {
-				pw.CloseWithError(fmt.Errorf("failed to download chunk %s: %w", chunk.Name, err))
-				return
-			}
-
-			if hex.EncodeToString(chunkHasher.Sum(nil)) != chunk.SHA256 {
-				pw.CloseWithError(fmt.Errorf("chunk %s corrupted/tampered! Hash mismatch", chunk.Name))
-				return
-			}
+	payloadHasher := sha256.New()
+	for _, chunk := range manifest.Chunks {
+		var encryptedChunk bytes.Buffer
+		if err := backend.Download(fmt.Sprintf("%s/%s", backupID, chunk.Name), &encryptedChunk); err != nil {
+			p.Stop()
+			return fmt.Errorf("failed to download chunk %s: %w", chunk.Name, err)
 		}
 
-		if hex.EncodeToString(payloadHasher.Sum(nil)) != manifest.PayloadEncryptedHash {
-			pw.CloseWithError(fmt.Errorf("fatal: overall payload hash does not match manifest"))
-			return
+		encryptedBytes := encryptedChunk.Bytes()
+		if int64(len(encryptedBytes)) != chunk.EncryptedSize {
+			p.Stop()
+			return fmt.Errorf("chunk %s corrupted/tampered! Size mismatch", chunk.Name)
 		}
-	}()
+		if hashBytes(encryptedBytes) != chunk.EncryptedSHA256 {
+			p.Stop()
+			return fmt.Errorf("chunk %s corrupted/tampered! Hash mismatch", chunk.Name)
+		}
 
-	decReader, err := crypto.DecryptReader(identityPath, pr)
-	if err != nil {
-		p.Stop()
-		return fmt.Errorf("failed to initialize decryption stream: %w", err)
+		decReader, err := crypto.DecryptReader(identityPath, bytes.NewReader(encryptedBytes))
+		if err != nil {
+			p.Stop()
+			return fmt.Errorf("failed to decrypt chunk %s: %w", chunk.Name, err)
+		}
+		plainBytes, err := io.ReadAll(decReader)
+		if err != nil {
+			p.Stop()
+			return fmt.Errorf("failed to read decrypted chunk %s: %w", chunk.Name, err)
+		}
+		if int64(len(plainBytes)) != chunk.PlainSize {
+			p.Stop()
+			return fmt.Errorf("chunk %s corrupted/tampered! Plain size mismatch", chunk.Name)
+		}
+		if hashBytes(plainBytes) != chunk.PlainSHA256 {
+			p.Stop()
+			return fmt.Errorf("chunk %s corrupted/tampered! Plain hash mismatch", chunk.Name)
+		}
+		if _, err := outFile.Write(plainBytes); err != nil {
+			p.Stop()
+			return fmt.Errorf("failed to write restored chunk %s: %w", chunk.Name, err)
+		}
+		payloadHasher.Write(plainBytes)
+		p.Add(len(plainBytes))
 	}
 
-	progReader := &RestoreProgressReader{Reader: decReader, pb: p}
-
-	_, err = io.Copy(outFile, progReader)
-	if err != nil {
+	if hex.EncodeToString(payloadHasher.Sum(nil)) != manifest.PayloadSHA256 {
 		p.Stop()
-		return fmt.Errorf("decryption streaming failed: %w", err)
+		return fmt.Errorf("fatal: overall payload hash does not match manifest")
 	}
 
 	p.Stop()
