@@ -104,9 +104,32 @@ func TestLoadSkipsUnreadableEpoch(t *testing.T) {
 	if _, err := ix.Save(backend, []string{pub}); err != nil {
 		t.Fatalf("Save() error: %v", err)
 	}
-	// Corrupt one epoch file with garbage that is not valid age ciphertext.
-	backend.Put("index/000002.age", []byte("garbage-not-age"))
-	// Add a second valid epoch so we can confirm the merge continues.
+	ix.Add(entryFixture("bbb"))
+	if _, err := ix.Save(backend, []string{pub}); err != nil {
+		t.Fatalf("second Save() error: %v", err)
+	}
+	// Corrupt the third epoch with garbage that is not valid age ciphertext,
+	// after both valid epochs are already written.
+	backend.Put("index/000003.age", []byte("garbage-not-age"))
+
+	loaded, err := Load(backend, ident)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if !loaded.Has("aaa") || !loaded.Has("bbb") {
+		t.Fatalf("Load() lost entries: %+v", loaded.all)
+	}
+}
+
+func TestLoadRestoresEpochCounter(t *testing.T) {
+	pub, ident := identityFixture(t)
+	backend := memtest.NewMemoryBackend()
+
+	ix := New()
+	ix.Add(entryFixture("aaa"))
+	if _, err := ix.Save(backend, []string{pub}); err != nil {
+		t.Fatalf("Save() error: %v", err)
+	}
 	ix.Add(entryFixture("bbb"))
 	if _, err := ix.Save(backend, []string{pub}); err != nil {
 		t.Fatalf("second Save() error: %v", err)
@@ -116,8 +139,30 @@ func TestLoadSkipsUnreadableEpoch(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load() error: %v", err)
 	}
-	if !loaded.Has("aaa") || !loaded.Has("bbb") {
-		t.Fatalf("Load() lost entries: %+v", loaded.all)
+	loaded.Add(entryFixture("ccc"))
+	if _, err := loaded.Save(backend, []string{pub}); err != nil {
+		t.Fatalf("Save() after Load error: %v", err)
+	}
+
+	keys := backend.KeysWithPrefix("index/")
+	want := []string{"index/000001.age", "index/000002.age", "index/000003.age"}
+	if len(keys) != len(want) {
+		t.Fatalf("index files = %v, want %v", keys, want)
+	}
+	for i, k := range want {
+		if keys[i] != k {
+			t.Fatalf("index files = %v, want %v", keys, want)
+		}
+	}
+
+	reloaded, err := Load(backend, ident)
+	if err != nil {
+		t.Fatalf("Load() after save error: %v", err)
+	}
+	for _, hash := range []string{"aaa", "bbb", "ccc"} {
+		if !reloaded.Has(hash) {
+			t.Fatalf("reloaded index missing %s", hash)
+		}
 	}
 }
 
