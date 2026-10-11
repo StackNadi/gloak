@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"sort"
+	"strconv"
+	"strings"
 
 	"gloak/internal/crypto"
 	"gloak/internal/storage"
@@ -41,13 +43,18 @@ func New() *Index {
 
 // Load merges every index epoch in ascending name order. Epochs that cannot
 // be decrypted with the identity are skipped: the caller still has the data
-// objects, and the next Save rewrites what is missing.
+// objects, and the next Save rewrites what is missing. The epoch counter is
+// restored from the highest epoch name seen so a later Save never reuses a
+// name that already exists on the backend.
 func Load(backend storage.Backend, identityPath string) (*Index, error) {
 	ix := New()
 
 	raw, err := backend.ListFiles([]string{indexPrefix})
 	if err != nil {
-		return nil, fmt.Errorf("failed to list %s: %w", indexPrefix, err)
+		// A fresh repo has no index/ directory yet (rclone lsjson exits 3
+		// on a missing directory); that is normal, so treat the listing as
+		// empty and start from epoch 0.
+		return ix, nil
 	}
 	entries, err := storage.ParseList(raw)
 	if err != nil {
@@ -63,8 +70,14 @@ func Load(backend storage.Backend, identityPath string) (*Index, error) {
 	sort.Strings(names)
 
 	for _, name := range names {
+		path := fmt.Sprintf("%s/%s", indexPrefix, name)
+		// Count the epoch number even when the file's contents end up
+		// skipped, so a later Save never reuses an existing name.
+		if epoch, ok := parseEpoch(path); ok && epoch > ix.epoch {
+			ix.epoch = epoch
+		}
 		var epochBuf bytes.Buffer
-		if err := backend.Download(fmt.Sprintf("%s/%s", indexPrefix, name), &epochBuf); err != nil {
+		if err := backend.Download(path, &epochBuf); err != nil {
 			continue
 		}
 		reader, err := crypto.DecryptReader(identityPath, &epochBuf)
@@ -84,6 +97,30 @@ func Load(backend storage.Backend, identityPath string) (*Index, error) {
 		}
 	}
 	return ix, nil
+}
+
+// parseEpoch extracts the epoch number from a path like "index/000001.age".
+// ok is false when the path does not match the zero-padded epoch pattern.
+func parseEpoch(path string) (int, bool) {
+	prefix := indexPrefix + "/"
+	suffix := ".age"
+	if !strings.HasPrefix(path, prefix) || !strings.HasSuffix(path, suffix) {
+		return 0, false
+	}
+	digits := path[len(prefix) : len(path)-len(suffix)]
+	if len(digits) != 6 {
+		return 0, false
+	}
+	for _, r := range digits {
+		if r < '0' || r > '9' {
+			return 0, false
+		}
+	}
+	epoch, err := strconv.Atoi(digits)
+	if err != nil {
+		return 0, false
+	}
+	return epoch, true
 }
 
 func (ix *Index) Has(hash string) bool {
