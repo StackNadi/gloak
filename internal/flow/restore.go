@@ -26,6 +26,9 @@ func RunRestore(snapshotID, identityPath, remote, outputDir string) error {
 }
 
 func runRestore(snapshotID, outputDir, identityPath string, backend storage.Backend) (string, error) {
+	if isFileMode(backend, snapshotID) {
+		return runFileRestore(snapshotID, identityPath, outputDir, backend)
+	}
 	r, err := repo.Open(backend, identityPath)
 	if err != nil {
 		return "", err
