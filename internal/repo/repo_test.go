@@ -28,14 +28,14 @@ func TestInitWritesKeysAndConfig(t *testing.T) {
 	pubB, _ := testRecipient(t)
 	backend := memtest.NewMemoryBackend()
 
-	master, cfg, err := Init(backend, []string{pubA, pubB}, 4096, false)
+	master, cfg, err := Init(backend, []string{pubA, pubB}, 1, 8, 64, false)
 	if err != nil {
 		t.Fatalf("Init() error: %v", err)
 	}
 	if len(master) != 32 {
 		t.Fatalf("master key length = %d, want 32", len(master))
 	}
-	if cfg.Version != FormatVersion || cfg.ChunkSize != 4096 {
+	if cfg.Version != FormatVersion || cfg.ChunkMin != 1 || cfg.ChunkAvg != 8 || cfg.ChunkMax != 64 {
 		t.Fatalf("cfg = %+v", cfg)
 	}
 	if !backend.Has(ConfigPath) {
@@ -53,7 +53,7 @@ func TestOpenWithEachRecipientIdentity(t *testing.T) {
 	pubA, identA := testRecipient(t)
 	pubB, identB := testRecipient(t)
 	backend := memtest.NewMemoryBackend()
-	master, _, err := Init(backend, []string{pubA, pubB}, 4096, false)
+	master, _, err := Init(backend, []string{pubA, pubB}, 1, 8, 64, false)
 	if err != nil {
 		t.Fatalf("Init() error: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestOpenRejectsWrongIdentity(t *testing.T) {
 	pubA, _ := testRecipient(t)
 	_, identOther := testRecipient(t)
 	backend := memtest.NewMemoryBackend()
-	if _, _, err := Init(backend, []string{pubA}, 4096, false); err != nil {
+	if _, _, err := Init(backend, []string{pubA}, 1, 8, 64, false); err != nil {
 		t.Fatalf("Init() error: %v", err)
 	}
 	_, err := Open(backend, identOther)
@@ -93,6 +93,32 @@ func TestOpenRejectsMissingConfig(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), ConfigPath) {
 		t.Fatalf("Open() error = %v, want repo.json mention", err)
+	}
+}
+
+func TestInitRejectsBadChunkBounds(t *testing.T) {
+	pub, _ := testRecipient(t)
+	backend := memtest.NewMemoryBackend()
+	if _, _, err := Init(backend, []string{pub}, 8, 1, 64, false); err == nil {
+		t.Fatal("Init() succeeded with avg < min")
+	}
+}
+
+func TestOpenRejectsMissingCDCParams(t *testing.T) {
+	pub, ident := testRecipient(t)
+	backend := memtest.NewMemoryBackend()
+	if _, _, err := Init(backend, []string{pub}, 1, 8, 64, false); err != nil {
+		t.Fatal(err)
+	}
+	// Simulate a Phase 1 repo.json that only had chunk_size.
+	raw := []byte(`{"version":"2.0","created_at":"now","recipients":["` + pub + `"],"chunk_size":4096}`)
+	backend.Put(ConfigPath, raw)
+	_, err := Open(backend, ident)
+	if err == nil {
+		t.Fatal("Open() succeeded without CDC params")
+	}
+	if !strings.Contains(err.Error(), "chunk") {
+		t.Fatalf("error = %v, want chunk param mention", err)
 	}
 }
 

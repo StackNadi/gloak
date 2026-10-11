@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"time"
@@ -14,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/pterm/pterm"
 
+	"gloak/internal/chunker"
 	"gloak/internal/core"
 	"gloak/internal/crypto"
 	"gloak/internal/index"
@@ -68,41 +68,28 @@ func runBackup(filePath, identityPath string, backend storage.Backend, snapshotI
 		return BackupResult{}, fmt.Errorf("failed to load index: %w", err)
 	}
 
+	cdc, err := chunker.NewCDC(r.Config.ChunkMin, r.Config.ChunkAvg, r.Config.ChunkMax)
+	if err != nil {
+		return BackupResult{}, fmt.Errorf("invalid chunk config: %w", err)
+	}
+
 	file, err := os.Open(filePath)
 	if err != nil {
 		return BackupResult{}, fmt.Errorf("failed to open file: %w", err)
 	}
 	defer file.Close()
 
-	chunkSize := r.Config.ChunkSize
-	if chunkSize <= 0 {
-		return BackupResult{}, fmt.Errorf("invalid chunk size: %d", chunkSize)
-	}
-
 	res := BackupResult{SnapshotID: snapshotID}
 	var metas []core.ChunkMeta
 	var sinceCheckpoint int
 	payloadHasher := sha256.New()
-	buffer := make([]byte, int(chunkSize))
 
-	for chunkIdx := 0; ; chunkIdx++ {
-		n, readErr := io.ReadFull(file, buffer)
-		if readErr == io.EOF {
-			break
-		}
-		if readErr != nil && readErr != io.ErrUnexpectedEOF {
-			return BackupResult{}, fmt.Errorf("failed to read chunk %d: %w", chunkIdx, readErr)
-		}
-		if n == 0 {
-			break
-		}
-
-		chunk := buffer[:n]
+	err = cdc.Split(file, func(chunk []byte) error {
 		payloadHasher.Write(chunk)
 		hash := hashBytes(chunk)
 
 		res.TotalChunks++
-		res.TotalPlainBytes += int64(n)
+		res.TotalPlainBytes += int64(len(chunk))
 
 		dataPath := repo.DataPath(hash)
 
@@ -111,15 +98,15 @@ func runBackup(filePath, identityPath string, backend storage.Backend, snapshotI
 		} else {
 			sealed, err := crypto.SealChunk(r.MasterKey, hash, chunk)
 			if err != nil {
-				return BackupResult{}, fmt.Errorf("failed to seal chunk %s: %w", hash, err)
+				return fmt.Errorf("failed to seal chunk %s: %w", hash, err)
 			}
 			encSum := sha256.Sum256(sealed)
 			if err := backend.Upload(dataPath, bytes.NewReader(sealed)); err != nil {
-				return BackupResult{}, fmt.Errorf("failed to upload chunk %s: %w", hash, err)
+				return fmt.Errorf("failed to upload chunk %s: %w", hash, err)
 			}
 			ix.Add(index.Entry{
 				PlainSHA256:     hash,
-				PlainSize:       int64(n),
+				PlainSize:       int64(len(chunk)),
 				EncryptedSize:   int64(len(sealed)),
 				EncryptedSHA256: hex.EncodeToString(encSum[:]),
 			})
@@ -127,7 +114,7 @@ func runBackup(filePath, identityPath string, backend storage.Backend, snapshotI
 			sinceCheckpoint++
 			if sinceCheckpoint >= indexCheckpointEvery {
 				if _, err := ix.Save(backend, r.Config.Recipients); err != nil {
-					return BackupResult{}, fmt.Errorf("failed to checkpoint index: %w", err)
+					return fmt.Errorf("failed to checkpoint index: %w", err)
 				}
 				sinceCheckpoint = 0
 			}
@@ -146,6 +133,10 @@ func runBackup(filePath, identityPath string, backend storage.Backend, snapshotI
 		if progress != nil {
 			progress(res.TotalChunks)
 		}
+		return nil
+	})
+	if err != nil {
+		return BackupResult{}, err
 	}
 
 	if _, err := ix.Save(backend, r.Config.Recipients); err != nil {

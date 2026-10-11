@@ -13,7 +13,7 @@ import (
 )
 
 func TestBackupVerifyRestoreRoundTrip(t *testing.T) {
-	ident, backend, _ := repoFixture(t, 8)
+	ident, backend, _ := repoFixture(t)
 	payload := []byte("0123456789abcdefghij")
 	filePath := writeTempFile(t, payload)
 	snapshotID := "7f91c6c7-7a0b-44aa-ae23-997b60e4e998"
@@ -40,7 +40,7 @@ func TestBackupVerifyRestoreRoundTrip(t *testing.T) {
 }
 
 func TestVerifyRejectsCorruptChunk(t *testing.T) {
-	ident, backend, _ := repoFixture(t, 8)
+	ident, backend, _ := repoFixture(t)
 	payload := []byte("0123456789abcdefghij")
 	filePath := writeTempFile(t, payload)
 	snapshotID := "7f91c6c7-7a0b-44aa-ae23-997b60e4e998"
@@ -71,7 +71,7 @@ func TestVerifyRejectsCorruptChunk(t *testing.T) {
 }
 
 func TestRestoreRejectsEscapingChunkPath(t *testing.T) {
-	ident, backend, pub := repoFixture(t, 8)
+	ident, backend, pub := repoFixture(t)
 	snapshotID := "7f91c6c7-7a0b-44aa-ae23-997b60e4e998"
 
 	manifest := core.Manifest{
