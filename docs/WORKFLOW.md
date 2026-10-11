@@ -106,11 +106,20 @@ At least one keep flag is required. Without `--yes`, prune only prints the plan.
 
 ## Optional: notify on Telegram
 
-Set two environment variables and gloak sends a short message after backup, restore, verify, check, or prune:
+Set two environment variables and gloak sends a short status report after backup, restore, verify, check, or prune. The message includes the path or snapshot, useful counts, and how long the command took:
 
 ```bash
 export GLOAK_TELEGRAM_TOKEN="123456:ABC..."
 export GLOAK_TELEGRAM_CHAT_ID="your-chat-id"
+```
+
+Example message after a backup:
+
+```text
+gloak backup completed
+Path: /home/you/Documents
+Snapshot: 550e8400-e29b-41d4-a716-446655440000
+Duration: 42s
 ```
 
 A notify failure only prints a warning. It never fails the backup itself. The token is never printed.

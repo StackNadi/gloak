@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"time"
 
 	"github.com/pterm/pterm"
 
@@ -22,9 +23,13 @@ func (c *CheckCmd) Run() error {
 		pterm.Info.Printf("Using identity from: %s\n", ident)
 	}
 
+	start := time.Now()
 	if err := flow.RunCheck(ident, c.Remote); err != nil {
 		return err
 	}
-	notifyTelegram("gloak check completed")
+	notifyCommand("check",
+		"Remote: "+c.Remote,
+		"Duration: "+formatDuration(time.Since(start)),
+	)
 	return nil
 }

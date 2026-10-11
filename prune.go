@@ -1,7 +1,9 @@
 package main
 
 import (
+	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/pterm/pterm"
 
@@ -31,6 +33,7 @@ func (c *PruneCmd) Run() error {
 		KeepWeekly:  c.KeepWeekly,
 		KeepMonthly: c.KeepMonthly,
 	}
+	start := time.Now()
 	res, err := flow.RunPrune(ident, c.Remote, policy, c.Yes)
 	if err != nil {
 		return err
@@ -45,6 +48,13 @@ func (c *PruneCmd) Run() error {
 	}
 	pterm.Success.Printf("Deleted %d snapshots and %d objects; compacted index: %v\n",
 		res.DeletedSnapshots, res.DeletedObjects, res.CompactedEpochs)
-	notifyTelegram("gloak prune completed")
+	notifyCommand("prune",
+		fmt.Sprintf("Kept: %d snapshots", len(res.KeptSnapshots)),
+		fmt.Sprintf("Dead: %d snapshots", len(res.DeadSnapshots)),
+		fmt.Sprintf("Live chunks: %d", res.LiveChunks),
+		fmt.Sprintf("Garbage chunks: %d", res.GarbageChunks),
+		fmt.Sprintf("Deleted: %d snapshots, %d objects", res.DeletedSnapshots, res.DeletedObjects),
+		"Duration: "+formatDuration(time.Since(start)),
+	)
 	return nil
 }

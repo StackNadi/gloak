@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/alecthomas/kong"
 
@@ -23,10 +24,16 @@ func (c *BackupCmd) Run(ctx *kong.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := flow.RunBackup(c.ExistingFile, identityPath, c.Remote); err != nil {
+	start := time.Now()
+	snapshotID, err := flow.RunBackup(c.ExistingFile, identityPath, c.Remote)
+	if err != nil {
 		return fmt.Errorf("backup failed: %w", err)
 	}
-	notifyTelegram("gloak backup completed")
+	notifyCommand("backup",
+		"Path: "+c.ExistingFile,
+		"Snapshot: "+snapshotID,
+		"Duration: "+formatDuration(time.Since(start)),
+	)
 	return nil
 }
 
