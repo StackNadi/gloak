@@ -37,7 +37,7 @@ func RunBackup(filePath, identityPath, remote string) (string, error) {
 	snapshotID := core.GenerateUUID()
 
 	spinner, _ := pterm.DefaultSpinner.Start("Backing up...")
-	res, err := runBackup(filePath, identityPath, backend, snapshotID, func(done int) {
+	res, err := runBackupPath(filePath, identityPath, backend, snapshotID, func(done int) {
 		spinner.UpdateText(fmt.Sprintf("Backed up %d chunks", done))
 	})
 	if err != nil {
@@ -51,6 +51,22 @@ func RunBackup(filePath, identityPath, remote string) (string, error) {
 	pterm.Printf("Chunks: %d total, %d uploaded, %d skipped\n", res.TotalChunks, res.UploadedChunks, res.SkippedChunks)
 	pterm.Printf("Data size: %d bytes\n", res.TotalPlainBytes)
 	return res.SnapshotID, nil
+}
+
+// runBackupPath dispatches to the file or tree backup flow based on whether
+// filePath is a regular file or a directory.
+func runBackupPath(filePath, identityPath string, backend storage.Backend, snapshotID string, progress func(int)) (BackupResult, error) {
+	if _, err := uuid.Parse(snapshotID); err != nil {
+		return BackupResult{}, fmt.Errorf("invalid snapshot id: %w", err)
+	}
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return BackupResult{}, fmt.Errorf("failed to stat path: %w", err)
+	}
+	if info.IsDir() {
+		return runTreeBackup(filePath, identityPath, backend, snapshotID, progress)
+	}
+	return runBackup(filePath, identityPath, backend, snapshotID, progress)
 }
 
 func runBackup(filePath, identityPath string, backend storage.Backend, snapshotID string, progress func(int)) (BackupResult, error) {
