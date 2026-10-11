@@ -195,11 +195,6 @@ func encryptChunk(recipientKey string, plainChunk []byte) ([]byte, error) {
 	return encrypted.Bytes(), nil
 }
 
-func hashBytes(data []byte) string {
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:])
-}
-
 type ProgressReader struct {
 	io.Reader
 	pb *pterm.ProgressbarPrinter
