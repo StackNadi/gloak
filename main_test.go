@@ -94,6 +94,22 @@ func TestUploadCmdFileIsExistingFileArg(t *testing.T) {
 	}
 }
 
+func TestBackupCmdPathArgTag(t *testing.T) {
+	field, ok := reflect.TypeOf(BackupCmd{}).FieldByName("ExistingFile")
+	if !ok {
+		t.Fatal("field missing")
+	}
+	if _, ok := field.Tag.Lookup("arg"); !ok {
+		t.Fatal("path should be a positional arg")
+	}
+	if got := field.Tag.Get("name"); got != "path" {
+		t.Fatalf("name tag = %q", got)
+	}
+	if strings.Contains(field.Tag.Get("type"), "existingfile") {
+		t.Fatal("existingfile type still set; directories must parse")
+	}
+}
+
 func TestResolveInitRecipientsReadsFile(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "recipient.txt")
 	content := "# comment\n\nage1aaa\nage1bbb\n"

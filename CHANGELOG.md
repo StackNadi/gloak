@@ -11,6 +11,9 @@
 - `restore` and `verify` auto-detect file-mode folders by `locator.json` and fall back to repository layout otherwise.
 - `backup` splits files with content-defined chunking (gear hash). Chunk bounds `chunk_min`/`chunk_avg`/`chunk_max` are stored in `repo.json` at init; flags `--chunk-min`, `--chunk-avg`, `--chunk-max` override the defaults (512 KiB / 1 MiB / 8 MiB). A repeat backup of unchanged content uploads nothing.
 - `gloak check` reports structural consistency: every snapshot decrypts, every referenced chunk exists in `data/`, and unreferenced objects are listed as garbage. It does not download chunk payloads; use `verify` for a deep pass.
+- `backup` accepts a directory and writes a tree snapshot: sorted walk, empty directories preserved, symlinks skipped. Snapshot JSON carries `kind: tree` (or `kind: file` for single-file backups).
+- `gloak snapshots` lists every snapshot with kind, creation time, host, and a short detail string.
+- `restore` recreates directory trees and accepts `--path <rel>` to restore a subtree only. Tree entry paths are validated against traversal and absolute paths.
 
 ### Changed
 
