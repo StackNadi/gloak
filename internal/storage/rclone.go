@@ -18,6 +18,7 @@ type Backend interface {
 	Upload(remotePath string, in io.Reader) error
 	Download(remotePath string, out io.Writer) error
 	ListFiles(prefix []string) ([]byte, error)
+	ListRecursive(prefix []string) ([]string, error)
 	Delete(remotePath string) error
 }
 
@@ -84,6 +85,40 @@ func (r *RcloneBackend) ListFiles(prefix []string) ([]byte, error) {
 	}
 
 	return stdout.Bytes(), nil
+}
+
+// ListRecursive lists every file under prefix, recursively. Paths are
+// returned in the same remote-relative shape as Upload keys.
+func (r *RcloneBackend) ListRecursive(prefix []string) ([]string, error) {
+	remotePath := r.Remote
+	if len(prefix) > 0 {
+		remotePath = fmt.Sprintf("%s/%s", r.Remote, strings.Join(prefix, "/"))
+	}
+
+	cmd := exec.Command("rclone", rcloneArgs(r.ConfigPath, "lsjson", "-R", remotePath)...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to list %s via rclone lsjson: %w\nRclone Error: %s", remotePath, err, stderr.String())
+	}
+
+	entries, err := ParseList(stdout.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse recursive listing: %w", err)
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir {
+			continue
+		}
+		if len(prefix) > 0 {
+			out = append(out, strings.Join(append(append([]string{}, prefix...), e.Path), "/"))
+		} else {
+			out = append(out, e.Path)
+		}
+	}
+	return out, nil
 }
 
 // Delete removes a file or directory at the given remote path using rclone purge.
