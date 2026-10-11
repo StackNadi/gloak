@@ -1,0 +1,135 @@
+package repo
+
+import (
+	"bytes"
+	"crypto/rand"
+	"encoding/json"
+	"fmt"
+	"io"
+	"time"
+
+	"filippo.io/age"
+	"github.com/google/uuid"
+
+	"gloak/internal/crypto"
+	"gloak/internal/storage"
+)
+
+const masterKeySize = 32
+
+type Repo struct {
+	Backend   storage.Backend
+	Config    Config
+	MasterKey []byte
+}
+
+// KeysPathFor returns the remote path of the wrapped master key for a recipient.
+func KeysPathFor(recipient string) string {
+	return fmt.Sprintf("%s/%s.age", KeysPrefix, crypto.FingerprintRecipient(recipient))
+}
+
+// DataPath returns the content-addressed object path for a plaintext chunk hash.
+func DataPath(plainSHA256Hex string) string {
+	return fmt.Sprintf("%s/%s/%s", DataPrefix, plainSHA256Hex[:2], plainSHA256Hex)
+}
+
+// SnapshotPath returns the snapshot manifest path, rejecting anything that is
+// not a valid UUID so a crafted id can never escape the snapshots/ prefix.
+func SnapshotPath(snapshotID string) (string, error) {
+	if _, err := uuid.Parse(snapshotID); err != nil {
+		return "", fmt.Errorf("invalid snapshot id: %w", err)
+	}
+	return fmt.Sprintf("%s/%s.age", SnapshotsPrefix, snapshotID), nil
+}
+
+// Init creates the repository on the backend: one wrapped master key per
+// recipient first, repo.json last as the completion marker.
+func Init(backend storage.Backend, recipients []string, chunkSize int64) ([]byte, Config, error) {
+	if len(recipients) == 0 {
+		return nil, Config{}, fmt.Errorf("at least one recipient is required")
+	}
+	for _, r := range recipients {
+		if _, err := age.ParseX25519Recipient(r); err != nil {
+			return nil, Config{}, fmt.Errorf("invalid recipient %q: %w", r, err)
+		}
+	}
+	if chunkSize <= 0 {
+		return nil, Config{}, fmt.Errorf("chunk size must be positive")
+	}
+
+	master := make([]byte, masterKeySize)
+	if _, err := rand.Read(master); err != nil {
+		return nil, Config{}, fmt.Errorf("failed to generate master key: %w", err)
+	}
+
+	cfg := Config{
+		Version:    FormatVersion,
+		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
+		Recipients: recipients,
+		ChunkSize:  chunkSize,
+	}
+
+	for _, recipient := range recipients {
+		wrapped, err := crypto.EncryptMulti([]string{recipient}, master)
+		if err != nil {
+			return nil, Config{}, fmt.Errorf("failed to wrap master key: %w", err)
+		}
+		if err := backend.Upload(KeysPathFor(recipient), bytes.NewReader(wrapped)); err != nil {
+			return nil, Config{}, fmt.Errorf("failed to upload wrapped key: %w", err)
+		}
+	}
+
+	cfgBytes, err := json.MarshalIndent(cfg, "", "  ")
+	if err != nil {
+		return nil, Config{}, fmt.Errorf("failed to marshal repo config: %w", err)
+	}
+	if err := backend.Upload(ConfigPath, bytes.NewReader(cfgBytes)); err != nil {
+		return nil, Config{}, fmt.Errorf("failed to upload repo.json: %w", err)
+	}
+	return master, cfg, nil
+}
+
+// Open loads repo.json and unwraps the master key with the given identity.
+func Open(backend storage.Backend, identityPath string) (*Repo, error) {
+	var buf bytes.Buffer
+	if err := backend.Download(ConfigPath, &buf); err != nil {
+		return nil, fmt.Errorf("not a gloak repository (%s missing): %w", ConfigPath, err)
+	}
+
+	var cfg Config
+	if err := json.Unmarshal(buf.Bytes(), &cfg); err != nil {
+		return nil, fmt.Errorf("failed to parse %s: %w", ConfigPath, err)
+	}
+	if cfg.Version != FormatVersion {
+		return nil, fmt.Errorf("unsupported repository format %q (want %q)", cfg.Version, FormatVersion)
+	}
+
+	raw, err := backend.ListFiles([]string{KeysPrefix})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list keys: %w", err)
+	}
+	entries, err := storage.ParseList(raw)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse keys listing: %w", err)
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir {
+			continue
+		}
+		var keyBuf bytes.Buffer
+		if err := backend.Download(fmt.Sprintf("%s/%s", KeysPrefix, entry.Path), &keyBuf); err != nil {
+			continue
+		}
+		reader, err := crypto.DecryptReader(identityPath, &keyBuf)
+		if err != nil {
+			continue
+		}
+		master, err := io.ReadAll(reader)
+		if err != nil || len(master) != masterKeySize {
+			continue
+		}
+		return &Repo{Backend: backend, Config: cfg, MasterKey: master}, nil
+	}
+	return nil, fmt.Errorf("identity cannot open this repository")
+}
