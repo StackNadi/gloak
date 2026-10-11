@@ -128,6 +128,24 @@ func (ix *Index) Has(hash string) bool {
 	return ok
 }
 
+// AllHashes returns every known plaintext hash, sorted. Pending entries that
+// were never saved are included so check sees work in progress.
+func (ix *Index) AllHashes() []string {
+	seen := make(map[string]bool, len(ix.all)+len(ix.pending))
+	for h := range ix.all {
+		seen[h] = true
+	}
+	for h := range ix.pending {
+		seen[h] = true
+	}
+	out := make([]string, 0, len(seen))
+	for h := range seen {
+		out = append(out, h)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (ix *Index) Get(hash string) (Entry, bool) {
 	if e, ok := ix.pending[hash]; ok {
 		return e, true

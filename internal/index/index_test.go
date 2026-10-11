@@ -47,6 +47,17 @@ func TestAddHasGet(t *testing.T) {
 	}
 }
 
+func TestAllHashesMergesPendingAndAll(t *testing.T) {
+	ix := New()
+	ix.Add(entryFixture("bbb"))
+	ix.Add(entryFixture("aaa"))
+	got := ix.AllHashes()
+	want := []string{"aaa", "bbb"}
+	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Fatalf("AllHashes() = %v, want %v", got, want)
+	}
+}
+
 func TestSaveAndLoadAcrossEpochs(t *testing.T) {
 	pub, ident := identityFixture(t)
 	backend := memtest.NewMemoryBackend()
