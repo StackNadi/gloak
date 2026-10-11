@@ -26,6 +26,7 @@ func (c *BackupCmd) Run(ctx *kong.Context) error {
 	if _, err := flow.RunBackup(c.ExistingFile, identityPath, c.Remote); err != nil {
 		return fmt.Errorf("backup failed: %w", err)
 	}
+	notifyTelegram("gloak backup completed")
 	return nil
 }
 

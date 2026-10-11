@@ -23,5 +23,9 @@ func (v *VerifyCmd) Run() error {
 		pterm.Info.Printf("Using identity from: %s\n", ident)
 	}
 
-	return flow.RunVerify(v.UUID, ident, v.Remote)
+	if err := flow.RunVerify(v.UUID, ident, v.Remote); err != nil {
+		return err
+	}
+	notifyTelegram("gloak verify completed")
+	return nil
 }

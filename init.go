@@ -17,9 +17,13 @@ type InitCmd struct {
 	ChunkMin  int64  `help:"Minimum CDC chunk size in bytes (default 524288)."`
 	ChunkAvg  int64  `help:"Average CDC chunk size in bytes (default 1048576)."`
 	ChunkMax  int64  `help:"Maximum CDC chunk size in bytes (default 8388608)."`
+	PQ        bool   `help:"Reserve post-quantum hybrid recipients (not implemented yet)."`
 }
 
 func (c *InitCmd) Run() error {
+	if c.PQ {
+		return fmt.Errorf("--pq hybrid recipients are not implemented yet (reserved for a later phase)")
+	}
 	recipients, err := resolveInitRecipients(c.Recipient)
 	if err != nil {
 		return err
@@ -29,26 +33,35 @@ func (c *InitCmd) Run() error {
 
 // resolveInitRecipients turns the --recipient value into a key list. An empty
 // path falls back to ~/.gloak/recipient.txt. A value that looks like keys
-// (starts with age1 or contains commas) is split on commas; anything else is
-// treated as a file path with one key per line, skipping blanks and # comments.
+// (starts with age1, ssh-ed25519, ssh-rsa, or contains commas) is split on
+// commas; anything else is treated as a file path with one key per line,
+// skipping blanks and # comments.
 func resolveInitRecipients(path string) ([]string, error) {
 	if path == "" {
 		path = filepath.Join(getDefaultDir(), "recipient.txt")
 	}
-	if !strings.HasPrefix(path, "age1") && !strings.Contains(path, ",") {
-		return readRecipientFile(path)
-	}
-	var out []string
-	for _, part := range strings.Split(path, ",") {
-		part = strings.TrimSpace(part)
-		if part != "" {
-			out = append(out, part)
+	if looksLikeInlineKeys(path) {
+		var out []string
+		// SSH keys contain spaces; split only on commas.
+		for _, part := range strings.Split(path, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				out = append(out, part)
+			}
 		}
+		if len(out) == 0 {
+			return nil, fmt.Errorf("no recipients found (run 'gloak keygen' first)")
+		}
+		return out, nil
 	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("no recipients found (run 'gloak keygen' first)")
-	}
-	return out, nil
+	return readRecipientFile(path)
+}
+
+func looksLikeInlineKeys(s string) bool {
+	return strings.HasPrefix(s, "age1") ||
+		strings.HasPrefix(s, "ssh-ed25519 ") ||
+		strings.HasPrefix(s, "ssh-rsa ") ||
+		strings.Contains(s, ",")
 }
 
 func readRecipientFile(path string) ([]string, error) {

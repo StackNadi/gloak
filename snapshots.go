@@ -19,5 +19,8 @@ func (c *SnapshotsCmd) Run() error {
 	if ident == "" {
 		ident = filepath.Join(getDefaultDir(), "identity.txt")
 	}
-	return flow.RunSnapshots(ident, c.Remote)
+	if err := flow.RunSnapshots(ident, c.Remote); err != nil {
+		return err
+	}
+	return nil
 }
