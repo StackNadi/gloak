@@ -51,6 +51,8 @@ func TestCommandOptionShortTags(t *testing.T) {
 		{name: "init remote", cmd: InitCmd{}, fieldName: "Remote", wantShort: "R"},
 		{name: "init recipient", cmd: InitCmd{}, fieldName: "Recipient", wantShort: "r"},
 		{name: "init force", cmd: InitCmd{}, fieldName: "Force", wantShort: "f"},
+		{name: "upload recipient", cmd: UploadCmd{}, fieldName: "Recipient", wantShort: "r"},
+		{name: "upload remote", cmd: UploadCmd{}, fieldName: "Remote", wantShort: "R"},
 		{name: "backup identity", cmd: BackupCmd{}, fieldName: "Identity", wantShort: "i"},
 		{name: "backup remote", cmd: BackupCmd{}, fieldName: "Remote", wantShort: "R"},
 		{name: "restore identity", cmd: RestoreCmd{}, fieldName: "Identity", wantShort: "i"},
@@ -72,6 +74,19 @@ func TestCommandOptionShortTags(t *testing.T) {
 				t.Fatalf("short tag = %q, want %q", got, tt.wantShort)
 			}
 		})
+	}
+}
+
+func TestUploadCmdFileIsExistingFileArg(t *testing.T) {
+	field, ok := reflect.TypeOf(UploadCmd{}).FieldByName("File")
+	if !ok {
+		t.Fatal("UploadCmd.File missing")
+	}
+	if field.Tag.Get("type") != "existingfile" {
+		t.Fatalf("type tag = %q, want existingfile", field.Tag.Get("type"))
+	}
+	if _, ok := field.Tag.Lookup("arg"); !ok {
+		t.Fatal("File should be a positional arg")
 	}
 }
 
