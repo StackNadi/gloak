@@ -51,7 +51,7 @@ func SnapshotPath(snapshotID string) (string, error) {
 // recipient first, repo.json last as the completion marker. It refuses to
 // touch a repository that already exists unless force is set, because a
 // fresh master key would orphan every snapshot sealed with the old one.
-func Init(backend storage.Backend, recipients []string, chunkSize int64, force bool) ([]byte, Config, error) {
+func Init(backend storage.Backend, recipients []string, min, avg, max int64, force bool) ([]byte, Config, error) {
 	if len(recipients) == 0 {
 		return nil, Config{}, fmt.Errorf("at least one recipient is required")
 	}
@@ -60,8 +60,8 @@ func Init(backend storage.Backend, recipients []string, chunkSize int64, force b
 			return nil, Config{}, fmt.Errorf("invalid recipient %q: %w", r, err)
 		}
 	}
-	if chunkSize <= 0 {
-		return nil, Config{}, fmt.Errorf("chunk size must be positive")
+	if min <= 0 || avg <= 0 || max <= 0 || max < avg || avg < min {
+		return nil, Config{}, fmt.Errorf("chunk bounds require 0 < min <= avg <= max (min=%d avg=%d max=%d)", min, avg, max)
 	}
 
 	if !force {
@@ -79,7 +79,9 @@ func Init(backend storage.Backend, recipients []string, chunkSize int64, force b
 		Version:    FormatVersion,
 		CreatedAt:  time.Now().UTC().Format(time.RFC3339),
 		Recipients: recipients,
-		ChunkSize:  chunkSize,
+		ChunkMin:   min,
+		ChunkAvg:   avg,
+		ChunkMax:   max,
 	}
 
 	for _, recipient := range recipients {
@@ -115,6 +117,10 @@ func Open(backend storage.Backend, identityPath string) (*Repo, error) {
 	}
 	if cfg.Version != FormatVersion {
 		return nil, fmt.Errorf("unsupported repository format %q (want %q)", cfg.Version, FormatVersion)
+	}
+	if cfg.ChunkMin <= 0 || cfg.ChunkAvg <= 0 || cfg.ChunkMax <= 0 ||
+		cfg.ChunkMax < cfg.ChunkAvg || cfg.ChunkAvg < cfg.ChunkMin {
+		return nil, fmt.Errorf("invalid chunk parameters in %s (min=%d avg=%d max=%d)", ConfigPath, cfg.ChunkMin, cfg.ChunkAvg, cfg.ChunkMax)
 	}
 
 	raw, err := backend.ListFiles([]string{KeysPrefix})

@@ -14,6 +14,9 @@ type InitCmd struct {
 	Remote    string `short:"R" required:"" help:"Repository remote, e.g. b2:my-bucket/gloak or local path"`
 	Recipient string `short:"r" help:"Recipient public key file or comma-separated keys (default ~/.gloak/recipient.txt)"`
 	Force     bool   `short:"f" help:"Overwrite an existing repository (makes old snapshots unreadable)"`
+	ChunkMin  int64  `help:"Minimum CDC chunk size in bytes (default 524288)."`
+	ChunkAvg  int64  `help:"Average CDC chunk size in bytes (default 1048576)."`
+	ChunkMax  int64  `help:"Maximum CDC chunk size in bytes (default 8388608)."`
 }
 
 func (c *InitCmd) Run() error {
@@ -21,7 +24,7 @@ func (c *InitCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return flow.RunInit(recipients, c.Remote, c.Force)
+	return flow.RunInit(recipients, c.Remote, c.ChunkMin, c.ChunkAvg, c.ChunkMax, c.Force)
 }
 
 // resolveInitRecipients turns the --recipient value into a key list. An empty
