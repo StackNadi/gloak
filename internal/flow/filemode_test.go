@@ -176,3 +176,59 @@ func TestRunRestoreFileModeCorruptChunk(t *testing.T) {
 		t.Fatalf("err = %v, want CHUNK CORRUPT", err)
 	}
 }
+
+func TestRunVerifyFileModeOK(t *testing.T) {
+	recipient, identityPath := testIdentityFile(t)
+	src := filepath.Join(t.TempDir(), "v.bin")
+	if err := os.WriteFile(src, []byte("verify me"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	backend := memtest.NewMemoryBackend()
+	backupID, err := RunUpload(src, []string{recipient}, backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := runVerify(backupID, identityPath, backend); err != nil {
+		t.Fatalf("runVerify() error: %v", err)
+	}
+}
+
+func TestRunVerifyFileModeCorrupt(t *testing.T) {
+	recipient, identityPath := testIdentityFile(t)
+	src := filepath.Join(t.TempDir(), "v.bin")
+	if err := os.WriteFile(src, []byte("verify me"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	backend := memtest.NewMemoryBackend()
+	backupID, err := RunUpload(src, []string{recipient}, backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw := backend.Get(backupID + "/chunk_00000")
+	raw[0] ^= 0xff
+	backend.Put(backupID+"/chunk_00000", raw)
+
+	err = runVerify(backupID, identityPath, backend)
+	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("CHUNK CORRUPT")) {
+		t.Fatalf("err = %v, want CHUNK CORRUPT", err)
+	}
+}
+
+func TestRunVerifyFileModeMissingLocator(t *testing.T) {
+	recipient, identityPath := testIdentityFile(t)
+	src := filepath.Join(t.TempDir(), "v.bin")
+	if err := os.WriteFile(src, []byte("x"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	backend := memtest.NewMemoryBackend()
+	backupID, err := RunUpload(src, []string{recipient}, backend)
+	if err != nil {
+		t.Fatal(err)
+	}
+	backend.Delete(backupID + "/locator.json")
+
+	// Without locator, falls through to repository verify; must fail.
+	if err := runVerify(backupID, identityPath, backend); err == nil {
+		t.Fatal("expected error for missing locator")
+	}
+}
