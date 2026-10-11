@@ -52,7 +52,7 @@ func TestRunRestoreFileModeRoundTrip(t *testing.T) {
 	}
 
 	outDir := t.TempDir()
-	gotPath, err := runRestore(backupID, outDir, identityPath, backend)
+	gotPath, err := runRestore(backupID, outDir, identityPath, backend, "")
 	if err != nil {
 		t.Fatalf("runRestore() error: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestRunRestoreFileModeEmptyFile(t *testing.T) {
 	}
 
 	outDir := t.TempDir()
-	gotPath, err := runRestore(backupID, outDir, identityPath, backend)
+	gotPath, err := runRestore(backupID, outDir, identityPath, backend, "")
 	if err != nil {
 		t.Fatalf("runRestore() error: %v", err)
 	}
@@ -105,7 +105,7 @@ func TestRunRestoreFileModeEitherIdentity(t *testing.T) {
 	}
 	for _, id := range []string{id1, id2} {
 		out := t.TempDir()
-		if _, err := runRestore(backupID, out, id, backend); err != nil {
+		if _, err := runRestore(backupID, out, id, backend, ""); err != nil {
 			t.Fatalf("restore with %s: %v", id, err)
 		}
 	}
@@ -127,7 +127,7 @@ func TestRunRestoreFileModeMissingLocator(t *testing.T) {
 	// Without locator, isFileMode is false, so restore falls through to
 	// repository Open. Either "incomplete" or a repository error is fine;
 	// we only assert it fails.
-	if _, err := runRestore(backupID, t.TempDir(), identityPath, backend); err == nil {
+	if _, err := runRestore(backupID, t.TempDir(), identityPath, backend, ""); err == nil {
 		t.Fatal("expected error for missing locator")
 	}
 }
@@ -150,7 +150,7 @@ func TestRunRestoreFileModeRejectsTraversalManifest(t *testing.T) {
 	m.Chunks[0].Name = "../evil"
 	resealFileManifest(t, backend, identityPath, backupID, m)
 
-	_, err = runRestore(backupID, t.TempDir(), identityPath, backend)
+	_, err = runRestore(backupID, t.TempDir(), identityPath, backend, "")
 	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("invalid chunk")) {
 		t.Fatalf("err = %v, want invalid chunk", err)
 	}
@@ -171,7 +171,7 @@ func TestRunRestoreFileModeCorruptChunk(t *testing.T) {
 	raw[len(raw)/2] ^= 0xff
 	backend.Put(backupID+"/chunk_00000", raw)
 
-	_, err = runRestore(backupID, t.TempDir(), identityPath, backend)
+	_, err = runRestore(backupID, t.TempDir(), identityPath, backend, "")
 	if err == nil || !bytes.Contains([]byte(err.Error()), []byte("CHUNK CORRUPT")) {
 		t.Fatalf("err = %v, want CHUNK CORRUPT", err)
 	}
