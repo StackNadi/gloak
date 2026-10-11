@@ -9,7 +9,8 @@ import (
 )
 
 type RcloneBackend struct {
-	Remote     string
+	Remote string
+	// ConfigPath is optional. When empty, rclone uses its own default config.
 	ConfigPath string
 }
 
@@ -21,16 +22,21 @@ type Backend interface {
 }
 
 func NewRcloneBackend(remote string) *RcloneBackend {
-	return &RcloneBackend{
-		Remote:     remote,
-		ConfigPath: "/home/keraki/.config/rclone/rclone.conf",
+	return &RcloneBackend{Remote: remote}
+}
+
+func rcloneArgs(configPath string, base ...string) []string {
+	args := append([]string{}, base...)
+	if configPath != "" {
+		args = append(args, "--config", configPath)
 	}
+	return args
 }
 
 func (r *RcloneBackend) Upload(remotePath string, in io.Reader) error {
 	fullDest := fmt.Sprintf("%s/%s", r.Remote, remotePath)
 
-	cmd := exec.Command("rclone", "rcat", "--config", r.ConfigPath, fullDest)
+	cmd := exec.Command("rclone", rcloneArgs(r.ConfigPath, "rcat", fullDest)...)
 
 	cmd.Stdin = in
 
@@ -46,7 +52,7 @@ func (r *RcloneBackend) Upload(remotePath string, in io.Reader) error {
 func (r *RcloneBackend) Download(remotePath string, out io.Writer) error {
 	fullSrc := fmt.Sprintf("%s/%s", r.Remote, remotePath)
 
-	cmd := exec.Command("rclone", "cat", "--config", r.ConfigPath, fullSrc)
+	cmd := exec.Command("rclone", rcloneArgs(r.ConfigPath, "cat", fullSrc)...)
 
 	cmd.Stdout = out
 
@@ -68,7 +74,7 @@ func (r *RcloneBackend) ListFiles(prefix []string) ([]byte, error) {
 		remotePath = fmt.Sprintf("%s/%s", r.Remote, strings.Join(prefix, "/"))
 	}
 
-	cmd := exec.Command("rclone", "lsjson", "--config", r.ConfigPath, remotePath)
+	cmd := exec.Command("rclone", rcloneArgs(r.ConfigPath, "lsjson", remotePath)...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -84,7 +90,7 @@ func (r *RcloneBackend) ListFiles(prefix []string) ([]byte, error) {
 func (r *RcloneBackend) Delete(remotePath string) error {
 	fullPath := fmt.Sprintf("%s/%s", r.Remote, remotePath)
 
-	cmd := exec.Command("rclone", "purge", "--config", r.ConfigPath, fullPath)
+	cmd := exec.Command("rclone", rcloneArgs(r.ConfigPath, "purge", fullPath)...)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
