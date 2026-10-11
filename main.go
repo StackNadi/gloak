@@ -14,6 +14,7 @@ var cli struct {
 	Debug bool `help:"Enable debug mode." short:"d"`
 
 	Keygen  KeygenCmd  `cmd:"" help:"Generate an X25519 identity and recipient file."`
+	Init    InitCmd    `cmd:"" help:"Initialize a new gloak repository." group:"Repository"`
 	Upload  UploadCmd  `cmd:"" help:"Encrypt, chunk, and upload a file to a storage destination."`
 	Resume  ResumeCmd  `cmd:"" help:"Validate saved state for an interrupted upload."`
 	Restore RestoreCmd `cmd:"" help:"Restore and decrypt a backup from storage."`

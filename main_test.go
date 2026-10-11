@@ -48,6 +48,8 @@ func TestCommandOptionShortTags(t *testing.T) {
 	}{
 		{name: "keygen output dir", cmd: KeygenCmd{}, fieldName: "OutputDir", wantShort: "o"},
 		{name: "keygen force", cmd: KeygenCmd{}, fieldName: "Force", wantShort: "f"},
+		{name: "init remote", cmd: InitCmd{}, fieldName: "Remote", wantShort: "R"},
+		{name: "init recipient", cmd: InitCmd{}, fieldName: "Recipient", wantShort: "r"},
 		{name: "upload recipient", cmd: UploadCmd{}, fieldName: "Recipient", wantShort: "r"},
 		{name: "upload remote", cmd: UploadCmd{}, fieldName: "Remote", wantShort: "R"},
 		{name: "restore identity", cmd: RestoreCmd{}, fieldName: "Identity", wantShort: "i"},
@@ -71,5 +73,60 @@ func TestCommandOptionShortTags(t *testing.T) {
 				t.Fatalf("short tag = %q, want %q", got, tt.wantShort)
 			}
 		})
+	}
+}
+
+func TestResolveInitRecipientsReadsFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "recipient.txt")
+	content := "# comment\n\nage1aaa\nage1bbb\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write recipient file: %v", err)
+	}
+
+	got, err := resolveInitRecipients(path)
+	if err != nil {
+		t.Fatalf("resolveInitRecipients() error: %v", err)
+	}
+	want := []string{"age1aaa", "age1bbb"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("resolveInitRecipients() = %v, want %v", got, want)
+	}
+}
+
+func TestResolveInitRecipientsParsesInlineKeys(t *testing.T) {
+	got, err := resolveInitRecipients("age1aaa, age1bbb")
+	if err != nil {
+		t.Fatalf("resolveInitRecipients() error: %v", err)
+	}
+	want := []string{"age1aaa", "age1bbb"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("resolveInitRecipients() = %v, want %v", got, want)
+	}
+}
+
+func TestResolveInitRecipientsEmptyFileErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "recipient.txt")
+	if err := os.WriteFile(path, []byte("# only a comment\n\n"), 0644); err != nil {
+		t.Fatalf("failed to write recipient file: %v", err)
+	}
+
+	_, err := resolveInitRecipients(path)
+	if err == nil {
+		t.Fatal("resolveInitRecipients() succeeded with empty file")
+	}
+	if !strings.Contains(err.Error(), "no recipients") {
+		t.Fatalf("resolveInitRecipients() error = %q, want no recipients mention", err)
+	}
+}
+
+func TestResolveInitRecipientsMissingFileErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.txt")
+
+	_, err := resolveInitRecipients(path)
+	if err == nil {
+		t.Fatal("resolveInitRecipients() succeeded with missing file")
+	}
+	if !strings.Contains(err.Error(), "gloak keygen") {
+		t.Fatalf("resolveInitRecipients() error = %q, want gloak keygen mention", err)
 	}
 }
