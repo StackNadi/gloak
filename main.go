@@ -15,11 +15,9 @@ var cli struct {
 
 	Keygen  KeygenCmd  `cmd:"" help:"Generate an X25519 identity and recipient file."`
 	Init    InitCmd    `cmd:"" help:"Initialize a new gloak repository." group:"Repository"`
-	Upload  UploadCmd  `cmd:"" help:"Encrypt, chunk, and upload a file to a storage destination."`
-	Resume  ResumeCmd  `cmd:"" help:"Validate saved state for an interrupted upload."`
+	Backup  BackupCmd  `cmd:"" help:"Encrypt, chunk, and upload a file to a repository."`
 	Restore RestoreCmd `cmd:"" help:"Restore and decrypt a backup from storage."`
 	Verify  VerifyCmd  `cmd:"" help:"Verify backup chunks and checksums."`
-	Cleanup CleanupCmd `cmd:"" help:"Remove orphan backup directories missing manifest.age."`
 	Setup   SetupCmd   `cmd:"" help:"Download and install rclone to ~/.gloak/bin/."`
 }
 
