@@ -11,9 +11,9 @@ import (
 	"gloak/internal/flow"
 )
 
-// BackupCmd backs up a file into a gloak repository.
+// BackupCmd backs up a file or directory into a gloak repository.
 type BackupCmd struct {
-	ExistingFile string `arg:"" name:"existingfile" type:"existingfile" help:"File to back up"`
+	ExistingFile string `arg:"" name:"path" help:"File or directory to back up"`
 	Identity     string `short:"i" default:"~/.gloak/identity.txt" help:"Path to identity file"`
 	Remote       string `short:"R" required:"" help:"Repository remote, e.g. b2:my-bucket/gloak"`
 }
