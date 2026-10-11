@@ -62,6 +62,8 @@ func TestCommandOptionShortTags(t *testing.T) {
 		{name: "verify remote", cmd: VerifyCmd{}, fieldName: "Remote", wantShort: "R"},
 		{name: "snapshots identity", cmd: SnapshotsCmd{}, fieldName: "Identity", wantShort: "i"},
 		{name: "snapshots remote", cmd: SnapshotsCmd{}, fieldName: "Remote", wantShort: "R"},
+		{name: "prune identity", cmd: PruneCmd{}, fieldName: "Identity", wantShort: "i"},
+		{name: "prune remote", cmd: PruneCmd{}, fieldName: "Remote", wantShort: "R"},
 		{name: "check identity", cmd: CheckCmd{}, fieldName: "Identity", wantShort: "i"},
 		{name: "check remote", cmd: CheckCmd{}, fieldName: "Remote", wantShort: "R"},
 		{name: "setup dir", cmd: SetupCmd{}, fieldName: "Dir", wantShort: "D"},
