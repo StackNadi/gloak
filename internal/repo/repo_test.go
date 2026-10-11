@@ -28,7 +28,7 @@ func TestInitWritesKeysAndConfig(t *testing.T) {
 	pubB, _ := testRecipient(t)
 	backend := memtest.NewMemoryBackend()
 
-	master, cfg, err := Init(backend, []string{pubA, pubB}, 4096)
+	master, cfg, err := Init(backend, []string{pubA, pubB}, 4096, false)
 	if err != nil {
 		t.Fatalf("Init() error: %v", err)
 	}
@@ -53,7 +53,7 @@ func TestOpenWithEachRecipientIdentity(t *testing.T) {
 	pubA, identA := testRecipient(t)
 	pubB, identB := testRecipient(t)
 	backend := memtest.NewMemoryBackend()
-	master, _, err := Init(backend, []string{pubA, pubB}, 4096)
+	master, _, err := Init(backend, []string{pubA, pubB}, 4096, false)
 	if err != nil {
 		t.Fatalf("Init() error: %v", err)
 	}
@@ -73,7 +73,7 @@ func TestOpenRejectsWrongIdentity(t *testing.T) {
 	pubA, _ := testRecipient(t)
 	_, identOther := testRecipient(t)
 	backend := memtest.NewMemoryBackend()
-	if _, _, err := Init(backend, []string{pubA}, 4096); err != nil {
+	if _, _, err := Init(backend, []string{pubA}, 4096, false); err != nil {
 		t.Fatalf("Init() error: %v", err)
 	}
 	_, err := Open(backend, identOther)

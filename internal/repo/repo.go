@@ -48,8 +48,10 @@ func SnapshotPath(snapshotID string) (string, error) {
 }
 
 // Init creates the repository on the backend: one wrapped master key per
-// recipient first, repo.json last as the completion marker.
-func Init(backend storage.Backend, recipients []string, chunkSize int64) ([]byte, Config, error) {
+// recipient first, repo.json last as the completion marker. It refuses to
+// touch a repository that already exists unless force is set, because a
+// fresh master key would orphan every snapshot sealed with the old one.
+func Init(backend storage.Backend, recipients []string, chunkSize int64, force bool) ([]byte, Config, error) {
 	if len(recipients) == 0 {
 		return nil, Config{}, fmt.Errorf("at least one recipient is required")
 	}
@@ -60,6 +62,12 @@ func Init(backend storage.Backend, recipients []string, chunkSize int64) ([]byte
 	}
 	if chunkSize <= 0 {
 		return nil, Config{}, fmt.Errorf("chunk size must be positive")
+	}
+
+	if !force {
+		if err := backend.Download(ConfigPath, io.Discard); err == nil {
+			return nil, Config{}, fmt.Errorf("repository already exists at this location (use force to overwrite)")
+		}
 	}
 
 	master := make([]byte, masterKeySize)

@@ -24,7 +24,7 @@ func repoFixture(t *testing.T, chunkSize int64) (string, *memtest.MemoryBackend,
 		t.Fatalf("write identity: %v", err)
 	}
 	backend := memtest.NewMemoryBackend()
-	if _, _, err := repo.Init(backend, []string{pub}, chunkSize); err != nil {
+	if _, _, err := repo.Init(backend, []string{pub}, chunkSize, false); err != nil {
 		t.Fatalf("repo.Init() error: %v", err)
 	}
 	return identPath, backend, pub

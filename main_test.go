@@ -50,6 +50,7 @@ func TestCommandOptionShortTags(t *testing.T) {
 		{name: "keygen force", cmd: KeygenCmd{}, fieldName: "Force", wantShort: "f"},
 		{name: "init remote", cmd: InitCmd{}, fieldName: "Remote", wantShort: "R"},
 		{name: "init recipient", cmd: InitCmd{}, fieldName: "Recipient", wantShort: "r"},
+		{name: "init force", cmd: InitCmd{}, fieldName: "Force", wantShort: "f"},
 		{name: "backup identity", cmd: BackupCmd{}, fieldName: "Identity", wantShort: "i"},
 		{name: "backup remote", cmd: BackupCmd{}, fieldName: "Remote", wantShort: "R"},
 		{name: "restore identity", cmd: RestoreCmd{}, fieldName: "Identity", wantShort: "i"},

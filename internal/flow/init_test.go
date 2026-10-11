@@ -1,6 +1,7 @@
 package flow
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 
@@ -17,7 +18,7 @@ func TestRunInitCreatesRepository(t *testing.T) {
 	_ = fileContent
 	backend := memtest.NewMemoryBackend()
 
-	master, cfg, err := runInit([]string{pub}, backend, 4096)
+	master, cfg, err := runInit([]string{pub}, backend, 4096, false)
 	if err != nil {
 		t.Fatalf("runInit() error: %v", err)
 	}
@@ -36,7 +37,7 @@ func TestRunInitCreatesRepository(t *testing.T) {
 }
 
 func TestRunInitRejectsNoRecipients(t *testing.T) {
-	if _, _, err := runInit(nil, memtest.NewMemoryBackend(), 4096); err == nil {
+	if _, _, err := runInit(nil, memtest.NewMemoryBackend(), 4096, false); err == nil {
 		t.Fatal("runInit() succeeded with no recipients")
 	} else if !strings.Contains(err.Error(), "recipient") {
 		t.Fatalf("runInit() error = %v, want recipient mention", err)
@@ -44,7 +45,47 @@ func TestRunInitRejectsNoRecipients(t *testing.T) {
 }
 
 func TestRunInitRejectsInvalidRecipient(t *testing.T) {
-	if _, _, err := runInit([]string{"age1bad"}, memtest.NewMemoryBackend(), 4096); err == nil {
+	if _, _, err := runInit([]string{"age1bad"}, memtest.NewMemoryBackend(), 4096, false); err == nil {
 		t.Fatal("runInit() succeeded with invalid recipient")
+	}
+}
+
+func TestRunInitRejectsExistingRepository(t *testing.T) {
+	pub, _, _, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey() error: %v", err)
+	}
+	backend := memtest.NewMemoryBackend()
+
+	if _, _, err := runInit([]string{pub}, backend, 4096, false); err != nil {
+		t.Fatalf("runInit() error: %v", err)
+	}
+	if _, _, err := runInit([]string{pub}, backend, 4096, false); err == nil {
+		t.Fatal("runInit() succeeded on existing repository without force")
+	} else if !strings.Contains(err.Error(), "already exists") {
+		t.Fatalf("runInit() error = %v, want already exists mention", err)
+	}
+}
+
+func TestRunInitForceOverwrites(t *testing.T) {
+	pub, _, _, err := crypto.GenerateKey()
+	if err != nil {
+		t.Fatalf("GenerateKey() error: %v", err)
+	}
+	backend := memtest.NewMemoryBackend()
+
+	first, _, err := runInit([]string{pub}, backend, 4096, false)
+	if err != nil {
+		t.Fatalf("runInit() error: %v", err)
+	}
+	second, _, err := runInit([]string{pub}, backend, 4096, true)
+	if err != nil {
+		t.Fatalf("runInit(force) error: %v", err)
+	}
+	if bytes.Equal(first, second) {
+		t.Fatal("runInit(force) kept the old master key")
+	}
+	if !backend.Has(repo.ConfigPath) {
+		t.Fatal("repo.json missing after force init")
 	}
 }

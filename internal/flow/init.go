@@ -11,11 +11,13 @@ import (
 const defaultChunkSize = core.ChunkSize
 
 // RunInit creates a new gloak repository on remote and prints the outcome.
-func RunInit(recipients []string, remote string) error {
+// With force it overwrites an existing repository, which makes old snapshots
+// unreadable.
+func RunInit(recipients []string, remote string, force bool) error {
 	backend := storage.NewRcloneBackend(remote)
 	spinner, _ := pterm.DefaultSpinner.Start("Initializing repository...")
 
-	master, cfg, err := runInit(recipients, backend, defaultChunkSize)
+	master, cfg, err := runInit(recipients, backend, defaultChunkSize, force)
 	if err != nil {
 		_ = spinner.Stop()
 		return err
@@ -29,6 +31,6 @@ func RunInit(recipients []string, remote string) error {
 	return nil
 }
 
-func runInit(recipients []string, backend storage.Backend, chunkSize int64) ([]byte, repo.Config, error) {
-	return repo.Init(backend, recipients, chunkSize)
+func runInit(recipients []string, backend storage.Backend, chunkSize int64, force bool) ([]byte, repo.Config, error) {
+	return repo.Init(backend, recipients, chunkSize, force)
 }
