@@ -8,6 +8,7 @@ import (
 
 	"github.com/pterm/pterm"
 
+	"gloak/internal/core"
 	"gloak/internal/index"
 	"gloak/internal/repo"
 	"gloak/internal/storage"
@@ -69,13 +70,21 @@ func runCheck(identityPath string, backend storage.Backend) (CheckResult, error)
 			continue
 		}
 		id := strings.TrimSuffix(path.Base(entry.Path), ".age")
-		m, err := readManifest(backend, identityPath, id)
+		kind, fileM, treeM, err := readAnyManifest(backend, identityPath, id)
 		if err != nil {
 			return res, fmt.Errorf("snapshot %s: %w", id, err)
 		}
 		res.Snapshots++
-		for _, meta := range m.Chunks {
-			referenced[meta.PlainSHA256] = true
+		if kind == core.KindTree {
+			for _, te := range treeM.Entries {
+				for _, meta := range te.Chunks {
+					referenced[meta.PlainSHA256] = true
+				}
+			}
+		} else {
+			for _, meta := range fileM.Chunks {
+				referenced[meta.PlainSHA256] = true
+			}
 		}
 	}
 	for _, h := range ix.AllHashes() {
