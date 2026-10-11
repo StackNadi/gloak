@@ -28,8 +28,13 @@ func KeysPathFor(recipient string) string {
 	return fmt.Sprintf("%s/%s.age", KeysPrefix, crypto.FingerprintRecipient(recipient))
 }
 
-// DataPath returns the content-addressed object path for a plaintext chunk hash.
+// DataPath returns the content-addressed object path for a plaintext chunk
+// hash. Inputs shorter than 2 bytes cannot be sharded, so it returns
+// data/invalid instead of panicking.
 func DataPath(plainSHA256Hex string) string {
+	if len(plainSHA256Hex) < 2 {
+		return DataPrefix + "/invalid"
+	}
 	return fmt.Sprintf("%s/%s/%s", DataPrefix, plainSHA256Hex[:2], plainSHA256Hex)
 }
 

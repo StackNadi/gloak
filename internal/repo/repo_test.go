@@ -104,6 +104,15 @@ func TestDataPathUsesHashSharding(t *testing.T) {
 	}
 }
 
+func TestDataPathRejectsShortHash(t *testing.T) {
+	for _, in := range []string{"a", ""} {
+		got := DataPath(in)
+		if got != "data/invalid" {
+			t.Fatalf("DataPath(%q) = %q, want %q", in, got, "data/invalid")
+		}
+	}
+}
+
 func TestSnapshotPathRejectsInvalidUUID(t *testing.T) {
 	if _, err := SnapshotPath("../escape"); err == nil {
 		t.Fatal("SnapshotPath() accepted invalid uuid")
