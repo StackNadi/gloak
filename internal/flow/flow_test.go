@@ -26,7 +26,7 @@ func TestBackupVerifyRestoreRoundTrip(t *testing.T) {
 	}
 
 	outDir := t.TempDir()
-	restoredPath, err := runRestore(snapshotID, outDir, ident, backend)
+	restoredPath, err := runRestore(snapshotID, outDir, ident, backend, "")
 	if err != nil {
 		t.Fatalf("runRestore() error: %v", err)
 	}
@@ -103,7 +103,7 @@ func TestRestoreRejectsEscapingChunkPath(t *testing.T) {
 	}
 	backend.Put(snapshotPath, sealed)
 
-	if _, err := runRestore(snapshotID, t.TempDir(), ident, backend); err == nil {
+	if _, err := runRestore(snapshotID, t.TempDir(), ident, backend, ""); err == nil {
 		t.Fatal("runRestore() succeeded with escaping chunk path")
 	} else if !strings.Contains(err.Error(), "escapes data prefix") {
 		t.Fatalf("error = %v, want escapes data prefix", err)

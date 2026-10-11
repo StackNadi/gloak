@@ -9,10 +9,11 @@ import (
 )
 
 type RestoreCmd struct {
-	UUID      string `arg:"" name:"uuid" help:"Backup UUID to restore."`
-	Identity  string `help:"Identity private key file (defaults to ~/.gloak/identity.txt)." short:"i"`
-	Remote    string `help:"Source Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:"" short:"R"`
-	OutputDir string `help:"Output directory for restored file." default:"./restored" short:"o"`
+	UUID       string `arg:"" name:"uuid" help:"Backup UUID to restore."`
+	Identity   string `help:"Identity private key file (defaults to ~/.gloak/identity.txt)." short:"i"`
+	Remote     string `help:"Source Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:"" short:"R"`
+	OutputDir  string `help:"Output directory for restored file." default:"./restored" short:"o"`
+	PathFilter string `help:"Restore only this relative path (and children) from a tree snapshot."`
 }
 
 func (r *RestoreCmd) Run() error {
@@ -24,5 +25,5 @@ func (r *RestoreCmd) Run() error {
 		pterm.Info.Printf("Using identity from: %s\n", ident)
 	}
 
-	return flow.RunRestore(r.UUID, ident, r.Remote, r.OutputDir)
+	return flow.RunRestore(r.UUID, ident, r.Remote, r.OutputDir, r.PathFilter)
 }
