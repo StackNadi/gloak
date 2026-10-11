@@ -13,15 +13,15 @@ import (
 var cli struct {
 	Debug bool `help:"Enable debug mode." short:"d"`
 
-	Keygen  KeygenCmd  `cmd:"" help:"Generate an X25519 identity and recipient file."`
-	Init    InitCmd    `cmd:"" help:"Initialize a new gloak repository." group:"Repository"`
-	Backup  BackupCmd  `cmd:"" help:"Encrypt, chunk, and upload a file to a repository."`
-	Upload  UploadCmd  `cmd:"" help:"Encrypt and upload a file as a standalone folder (no repository)."`
-	Restore RestoreCmd `cmd:"" help:"Restore and decrypt a backup from storage."`
-	Verify  VerifyCmd  `cmd:"" help:"Verify backup chunks and checksums."`
+	Keygen    KeygenCmd    `cmd:"" help:"Generate an X25519 identity and recipient file."`
+	Init      InitCmd      `cmd:"" help:"Initialize a new gloak repository." group:"Repository"`
+	Backup    BackupCmd    `cmd:"" help:"Encrypt, chunk, and upload a file or directory to a repository."`
+	Upload    UploadCmd    `cmd:"" help:"Encrypt and upload a file as a standalone folder (no repository)."`
+	Restore   RestoreCmd   `cmd:"" help:"Restore and decrypt a backup from storage."`
+	Verify    VerifyCmd    `cmd:"" help:"Verify backup chunks and checksums."`
 	Snapshots SnapshotsCmd `cmd:"" help:"List snapshots in the repository."`
-	Check   CheckCmd   `cmd:"" help:"Check repository consistency (structural)."`
-	Setup   SetupCmd   `cmd:"" help:"Download and install rclone to ~/.gloak/bin/."`
+	Check     CheckCmd     `cmd:"" help:"Check repository consistency (structural)."`
+	Setup     SetupCmd     `cmd:"" help:"Download and install rclone to ~/.gloak/bin/."`
 }
 
 func getDefaultDir() string {
