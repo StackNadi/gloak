@@ -35,7 +35,7 @@ Storage layout (`filesystem-v2`):
 
 ```
 {remote}/
-  repo.json                 # non-secret: format version, recipient fingerprints, chunk params
+  repo.json                 # non-secret: format version, recipient public keys, chunk params
   keys/
     {recipient-hash}.age    # master key wrapped per recipient
   index/
@@ -46,7 +46,7 @@ Storage layout (`filesystem-v2`):
     ab/ab3f91...            # compressed + encrypted chunk, name = plaintext SHA-256
 ```
 
-`repo.json` stays plaintext on purpose. It carries no filenames, no hashes of user data, and no key material. Its job is to let the tool recognize a gloak repository and its format version without any key, like the current `locator.json`.
+`repo.json` stays plaintext on purpose. It carries no filenames, no hashes of user data, and no key material. Its job is to let the tool recognize a gloak repository and its format version without any key, like the current `locator.json`. Full recipient strings (not fingerprints) are stored so backup can seal snapshots without the identity file's public key line.
 
 Commands:
 
