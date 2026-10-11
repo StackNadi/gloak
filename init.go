@@ -13,6 +13,7 @@ import (
 type InitCmd struct {
 	Remote    string `short:"R" required:"" help:"Repository remote, e.g. b2:my-bucket/gloak or local path"`
 	Recipient string `short:"r" help:"Recipient public key file or comma-separated keys (default ~/.gloak/recipient.txt)"`
+	Force     bool   `short:"f" help:"Overwrite an existing repository (makes old snapshots unreadable)"`
 }
 
 func (c *InitCmd) Run() error {
@@ -20,7 +21,7 @@ func (c *InitCmd) Run() error {
 	if err != nil {
 		return err
 	}
-	return flow.RunInit(recipients, c.Remote)
+	return flow.RunInit(recipients, c.Remote, c.Force)
 }
 
 // resolveInitRecipients turns the --recipient value into a key list. An empty
