@@ -25,5 +25,9 @@ func (r *RestoreCmd) Run() error {
 		pterm.Info.Printf("Using identity from: %s\n", ident)
 	}
 
-	return flow.RunRestore(r.UUID, ident, r.Remote, r.OutputDir, r.PathFilter)
+	if err := flow.RunRestore(r.UUID, ident, r.Remote, r.OutputDir, r.PathFilter); err != nil {
+		return err
+	}
+	notifyTelegram("gloak restore completed")
+	return nil
 }

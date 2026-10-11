@@ -5,9 +5,22 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"filippo.io/age"
+	"filippo.io/age/agessh"
 )
+
+// ParseRecipient accepts age X25519 keys (age1...) and SSH public keys
+// (ssh-ed25519 / ssh-rsa). It is the single entry point for repository
+// recipients so init, upload, and sealing all accept the same formats.
+func ParseRecipient(s string) (age.Recipient, error) {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "ssh-ed25519 ") || strings.HasPrefix(s, "ssh-rsa ") {
+		return agessh.ParseRecipient(s)
+	}
+	return age.ParseX25519Recipient(s)
+}
 
 // EncryptMulti encrypts plaintext to every recipient. Any matching identity
 // can decrypt the result.
@@ -17,7 +30,7 @@ func EncryptMulti(recipientKeys []string, plaintext []byte) ([]byte, error) {
 	}
 	recipients := make([]age.Recipient, 0, len(recipientKeys))
 	for _, key := range recipientKeys {
-		r, err := age.ParseX25519Recipient(key)
+		r, err := ParseRecipient(key)
 		if err != nil {
 			return nil, fmt.Errorf("invalid recipient %q: %w", key, err)
 		}

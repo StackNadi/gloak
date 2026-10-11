@@ -8,7 +8,6 @@ import (
 	"io"
 	"time"
 
-	"filippo.io/age"
 	"github.com/google/uuid"
 
 	"gloak/internal/crypto"
@@ -56,7 +55,7 @@ func Init(backend storage.Backend, recipients []string, min, avg, max int64, for
 		return nil, Config{}, fmt.Errorf("at least one recipient is required")
 	}
 	for _, r := range recipients {
-		if _, err := age.ParseX25519Recipient(r); err != nil {
+		if _, err := crypto.ParseRecipient(r); err != nil {
 			return nil, Config{}, fmt.Errorf("invalid recipient %q: %w", r, err)
 		}
 	}

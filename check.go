@@ -22,5 +22,9 @@ func (c *CheckCmd) Run() error {
 		pterm.Info.Printf("Using identity from: %s\n", ident)
 	}
 
-	return flow.RunCheck(ident, c.Remote)
+	if err := flow.RunCheck(ident, c.Remote); err != nil {
+		return err
+	}
+	notifyTelegram("gloak check completed")
+	return nil
 }

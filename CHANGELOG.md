@@ -14,6 +14,10 @@
 - `backup` accepts a directory and writes a tree snapshot: sorted walk, empty directories preserved, symlinks skipped. Snapshot JSON carries `kind: tree` (or `kind: file` for single-file backups).
 - `gloak snapshots` lists every snapshot with kind, creation time, host, and a short detail string.
 - `restore` recreates directory trees and accepts `--path <rel>` to restore a subtree only. Tree entry paths are validated against traversal and absolute paths.
+- `gloak prune --keep-last N --keep-daily N --keep-weekly N --keep-monthly N` reclaims space with restic-style retention. Dry run by default; `--yes` deletes dead snapshots and unreferenced chunks, then compacts the index into a single epoch.
+- `init` and `upload` accept SSH public keys (`ssh-ed25519`, `ssh-rsa`) as recipients alongside age X25519 keys.
+- `init --pq` is reserved for post-quantum hybrid recipients and currently returns a clear not-implemented error.
+- Optional Telegram notify via `GLOAK_TELEGRAM_TOKEN` / `GLOAK_TELEGRAM_CHAT_ID` after commands; failures warn only. Token is never printed.
 
 ### Changed
 
@@ -27,3 +31,4 @@
 ### Fixed
 
 - The rclone config path is no longer hardcoded. An empty ConfigPath lets rclone use its own default.
+- Storage `Delete` uses `rclone deletefile` for single files instead of `purge` (which targets directories).
