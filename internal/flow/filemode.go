@@ -115,3 +115,44 @@ func runFileRestore(backupID, identityPath, outputDir string, backend storage.Ba
 	}
 	return outputPath, nil
 }
+
+func runFileVerify(backupID, identityPath string, backend storage.Backend) error {
+	m, err := readFileManifest(backend, identityPath, backupID)
+	if err != nil {
+		return err
+	}
+	masterKey, err := decodeFileMasterKey(m)
+	if err != nil {
+		return err
+	}
+
+	payloadHasher := sha256.New()
+	for _, meta := range m.Chunks {
+		if err := validateFileChunkName(meta.Name); err != nil {
+			return fmt.Errorf("invalid chunk name in manifest: %w", err)
+		}
+		var buf bytes.Buffer
+		if err := backend.Download(backupID+"/"+meta.Name, &buf); err != nil {
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): missing object: %w", meta.Index, meta.Name, err)
+		}
+		sealed := buf.Bytes()
+		if int64(len(sealed)) != meta.EncryptedSize {
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): encrypted size mismatch", meta.Index, meta.Name)
+		}
+		if hashBytes(sealed) != meta.EncryptedSHA256 {
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): encrypted sha256 mismatch", meta.Index, meta.Name)
+		}
+		plain, err := crypto.OpenChunk(masterKey, meta.PlainSHA256, sealed)
+		if err != nil {
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): %w", meta.Index, meta.Name, err)
+		}
+		if int64(len(plain)) != meta.PlainSize || hashBytes(plain) != meta.PlainSHA256 {
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): plaintext mismatch", meta.Index, meta.Name)
+		}
+		payloadHasher.Write(plain)
+	}
+	if hex.EncodeToString(payloadHasher.Sum(nil)) != m.PayloadSHA256 {
+		return fmt.Errorf("FATAL: overall payload hash differs from manifest")
+	}
+	return nil
+}

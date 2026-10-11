@@ -27,6 +27,9 @@ func RunVerify(snapshotID, identityPath, remote string) error {
 }
 
 func runVerify(snapshotID, identityPath string, backend storage.Backend) error {
+	if isFileMode(backend, snapshotID) {
+		return runFileVerify(snapshotID, identityPath, backend)
+	}
 	r, err := repo.Open(backend, identityPath)
 	if err != nil {
 		return err
