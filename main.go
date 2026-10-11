@@ -19,6 +19,7 @@ var cli struct {
 	Upload  UploadCmd  `cmd:"" help:"Encrypt and upload a file as a standalone folder (no repository)."`
 	Restore RestoreCmd `cmd:"" help:"Restore and decrypt a backup from storage."`
 	Verify  VerifyCmd  `cmd:"" help:"Verify backup chunks and checksums."`
+	Check   CheckCmd   `cmd:"" help:"Check repository consistency (structural)."`
 	Setup   SetupCmd   `cmd:"" help:"Download and install rclone to ~/.gloak/bin/."`
 }
 
