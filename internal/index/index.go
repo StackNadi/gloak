@@ -159,6 +159,29 @@ func (ix *Index) Add(entry Entry) {
 	ix.all[entry.PlainSHA256] = entry
 }
 
+// Compact writes a single new epoch containing only liveHashes (intersected
+// with known entries), then returns. Callers delete old epochs separately.
+// The epoch counter continues from the highest existing name so the new
+// file never collides with a prior epoch.
+func (ix *Index) Compact(backend storage.Backend, recipients []string, liveHashes map[string]bool) (int, error) {
+	// Reuse Save by replacing all and pending with the live subset, then
+	// force a save even if pending is empty (when there is something to write).
+	next := New()
+	next.epoch = ix.epoch
+	count := 0
+	for h, e := range ix.all {
+		if liveHashes[h] {
+			next.all[h] = e
+			next.pending[h] = e
+			count++
+		}
+	}
+	if count == 0 {
+		return 0, nil
+	}
+	return next.Save(backend, recipients)
+}
+
 // Save writes only the pending entries as the next epoch. It is a no-op when
 // nothing is pending, so a second backup of unchanged data writes no files.
 func (ix *Index) Save(backend storage.Backend, recipients []string) (int, error) {

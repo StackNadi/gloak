@@ -20,6 +20,7 @@ var cli struct {
 	Restore   RestoreCmd   `cmd:"" help:"Restore and decrypt a backup from storage."`
 	Verify    VerifyCmd    `cmd:"" help:"Verify backup chunks and checksums."`
 	Snapshots SnapshotsCmd `cmd:"" help:"List snapshots in the repository."`
+	Prune     PruneCmd     `cmd:"" help:"Remove dead snapshots and unreferenced chunks (dry run by default)."`
 	Check     CheckCmd     `cmd:"" help:"Check repository consistency (structural)."`
 	Setup     SetupCmd     `cmd:"" help:"Download and install rclone to ~/.gloak/bin/."`
 }

@@ -121,16 +121,17 @@ func (r *RcloneBackend) ListRecursive(prefix []string) ([]string, error) {
 	return out, nil
 }
 
-// Delete removes a file or directory at the given remote path using rclone purge.
+// Delete removes a single file at the given remote path using rclone
+// deletefile. Purge is for directories; deletefile is for files.
 func (r *RcloneBackend) Delete(remotePath string) error {
 	fullPath := fmt.Sprintf("%s/%s", r.Remote, remotePath)
 
-	cmd := exec.Command("rclone", rcloneArgs(r.ConfigPath, "purge", fullPath)...)
+	cmd := exec.Command("rclone", rcloneArgs(r.ConfigPath, "deletefile", fullPath)...)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to delete %s via rclone purge: %w\nRclone Error: %s", fullPath, err, stderr.String())
+		return fmt.Errorf("failed to delete %s via rclone deletefile: %w\nRclone Error: %s", fullPath, err, stderr.String())
 	}
 
 	return nil
