@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"time"
 
 	"github.com/pterm/pterm"
 
@@ -23,9 +24,13 @@ func (v *VerifyCmd) Run() error {
 		pterm.Info.Printf("Using identity from: %s\n", ident)
 	}
 
+	start := time.Now()
 	if err := flow.RunVerify(v.UUID, ident, v.Remote); err != nil {
 		return err
 	}
-	notifyTelegram("gloak verify completed")
+	notifyCommand("verify",
+		"Snapshot: "+v.UUID,
+		"Duration: "+formatDuration(time.Since(start)),
+	)
 	return nil
 }

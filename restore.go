@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"time"
 
 	"github.com/pterm/pterm"
 
@@ -25,9 +26,18 @@ func (r *RestoreCmd) Run() error {
 		pterm.Info.Printf("Using identity from: %s\n", ident)
 	}
 
+	start := time.Now()
 	if err := flow.RunRestore(r.UUID, ident, r.Remote, r.OutputDir, r.PathFilter); err != nil {
 		return err
 	}
-	notifyTelegram("gloak restore completed")
+	details := []string{
+		"Snapshot: " + r.UUID,
+		"Output: " + r.OutputDir,
+	}
+	if r.PathFilter != "" {
+		details = append(details, "Path filter: "+r.PathFilter)
+	}
+	details = append(details, "Duration: "+formatDuration(time.Since(start)))
+	notifyCommand("restore", details...)
 	return nil
 }
