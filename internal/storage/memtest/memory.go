@@ -86,6 +86,21 @@ func (m *MemoryBackend) ListFiles(prefix []string) ([]byte, error) {
 	return json.Marshal(entries)
 }
 
+// ListRecursive returns every stored file path under prefix, sorted.
+func (m *MemoryBackend) ListRecursive(prefix []string) ([]string, error) {
+	p := strings.Trim(strings.Join(prefix, "/"), "/")
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	var out []string
+	for key := range m.files {
+		if p == "" || strings.HasPrefix(key, p+"/") {
+			out = append(out, key)
+		}
+	}
+	sort.Strings(out)
+	return out, nil
+}
+
 func (m *MemoryBackend) Delete(remotePath string) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
