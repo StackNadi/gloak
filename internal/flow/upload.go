@@ -157,7 +157,6 @@ func RunUpload(filePath string, recipients []string, backend storage.Backend) (s
 		return "", fmt.Errorf("failed to upload locator: %w", err)
 	}
 
-	_ = spinner.Stop()
-	pterm.Success.Printf("Upload complete: %s (%d chunks, %d bytes)\n", backupID, len(metas), total)
+	spinner.Success(fmt.Sprintf("Upload complete: %s (%d chunks, %d bytes)", backupID, len(metas), total))
 	return backupID, nil
 }

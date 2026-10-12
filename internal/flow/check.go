@@ -32,8 +32,7 @@ func RunCheck(identityPath, remote string) error {
 		_ = spinner.Stop()
 		return err
 	}
-	_ = spinner.Stop()
-	pterm.Success.Println("Repository check passed")
+	spinner.Success("Repository check passed")
 	pterm.Printf("Snapshots: %d\n", res.Snapshots)
 	pterm.Printf("Referenced chunks: %d\n", res.Referenced)
 	pterm.Printf("Data objects: %d\n", res.DataObjects)
