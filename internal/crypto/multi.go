@@ -23,7 +23,8 @@ func ParseRecipient(s string) (age.Recipient, error) {
 }
 
 // EncryptMulti encrypts plaintext to every recipient. Any matching identity
-// can decrypt the result.
+// can decrypt the result. It rejects an empty recipient list and returns
+// recipient parsing or age encryption errors.
 func EncryptMulti(recipientKeys []string, plaintext []byte) ([]byte, error) {
 	if len(recipientKeys) == 0 {
 		return nil, fmt.Errorf("no recipients given")

@@ -5,8 +5,9 @@ import (
 	"strings"
 )
 
-// ValidateRelPath rejects tree entry paths that could escape the restore
-// root. The manifest is remote input; this is the trust boundary.
+// ValidateRelPath checks a slash-separated tree entry path without accessing
+// the filesystem. It rejects empty paths, null bytes, backslashes, leading
+// slashes, drive prefixes, and empty, . or .. segments.
 func ValidateRelPath(rel string) error {
 	if rel == "" {
 		return fmt.Errorf("empty path")

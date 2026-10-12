@@ -14,6 +14,8 @@ import (
 	"gloak/internal/storage"
 )
 
+// RunVerify verifies a standalone file backup or repository snapshot without
+// writing restored files. Access, decryption, and integrity errors are returned.
 func RunVerify(snapshotID, identityPath, remote string) error {
 	backend := storage.NewRcloneBackend(remote)
 	spinner, _ := pterm.DefaultSpinner.Start("Verifying backup...")
@@ -26,6 +28,9 @@ func RunVerify(snapshotID, identityPath, remote string) error {
 	return nil
 }
 
+// runVerify selects standalone verification when a locator can be downloaded,
+// otherwise it opens the repository and verifies the snapshot's file or tree
+// contents. It returns repository, manifest, and verification errors.
 func runVerify(snapshotID, identityPath string, backend storage.Backend) error {
 	if isFileMode(backend, snapshotID) {
 		return runFileVerify(snapshotID, identityPath, backend)
@@ -44,6 +49,9 @@ func runVerify(snapshotID, identityPath string, backend storage.Backend) error {
 	return runFileVerifyFromManifest(fileM, r, backend)
 }
 
+// runFileVerifyFromManifest verifies encrypted and plaintext chunk sizes and
+// hashes, authentication, and the overall payload hash without restoring files.
+// It returns chunk path, download, decryption, and integrity errors.
 func runFileVerifyFromManifest(manifest *core.Manifest, r *repo.Repo, backend storage.Backend) error {
 	payloadHasher := sha256.New()
 	for _, meta := range manifest.Chunks {
@@ -77,6 +85,9 @@ func runFileVerifyFromManifest(manifest *core.Manifest, r *repo.Repo, backend st
 	return nil
 }
 
+// runTreeVerify verifies paths and encrypted and plaintext chunk sizes and
+// hashes for file entries, ignoring other entry types. It returns path,
+// download, decryption, and integrity errors without writing restored files.
 func runTreeVerify(m *core.TreeManifest, r *repo.Repo, backend storage.Backend) error {
 	for _, entry := range m.Entries {
 		if entry.Type != "file" {

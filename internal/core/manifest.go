@@ -39,6 +39,7 @@ type TreeManifest struct {
 	Entries   []TreeEntry `json:"entries"`
 }
 
+// FileCount counts entries whose type is "file", including empty files.
 func (m *TreeManifest) FileCount() int {
 	n := 0
 	for _, e := range m.Entries {

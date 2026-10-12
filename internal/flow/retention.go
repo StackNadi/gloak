@@ -15,6 +15,7 @@ type RetentionPolicy struct {
 	KeepMonthly int
 }
 
+// isEmpty reports whether all retention counts are zero.
 func (p RetentionPolicy) isEmpty() bool {
 	return p.KeepLast == 0 && p.KeepDaily == 0 && p.KeepWeekly == 0 && p.KeepMonthly == 0
 }
@@ -27,7 +28,9 @@ type snapshotMeta struct {
 
 // selectKeepSnapshots returns the UUIDs that survive the retention policy.
 // Snapshots are processed newest first. A snapshot kept by any rule stays.
-// The input is mutated (sorted) in place.
+// Daily, weekly, and monthly rules keep the newest snapshot in each of the
+// latest occupied UTC days, ISO weeks, or months; nonpositive counts keep none.
+// The input is sorted in place, with equal timestamps ordered by UUID.
 func selectKeepSnapshots(snaps []snapshotMeta, p RetentionPolicy) map[string]bool {
 	keep := make(map[string]bool)
 

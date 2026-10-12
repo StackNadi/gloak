@@ -13,6 +13,9 @@ import (
 
 const chunkKeyInfo = "gloak-chunk-v1"
 
+// deriveChunkKey derives a 32-byte chunk key from masterKey using the decoded
+// plaintext SHA-256 hash as salt. It rejects malformed hex or hashes that do
+// not decode to 32 bytes and returns key derivation errors.
 func deriveChunkKey(masterKey []byte, plainSHA256Hex string) ([]byte, error) {
 	salt, err := hex.DecodeString(plainSHA256Hex)
 	if err != nil || len(salt) != sha256.Size {
@@ -23,6 +26,9 @@ func deriveChunkKey(masterKey []byte, plainSHA256Hex string) ([]byte, error) {
 
 // SealChunk compresses plain with zstd, then encrypts it with XChaCha20-Poly1305
 // under a key derived from masterKey. Output layout: 24-byte nonce || ciphertext.
+// plainSHA256Hex must encode 32 bytes; its exact text is authenticated, but its
+// value is not checked against plain. Hash decoding, key derivation, compression,
+// and encryption setup errors are returned.
 func SealChunk(masterKey []byte, plainSHA256Hex string, plain []byte) ([]byte, error) {
 	key, err := deriveChunkKey(masterKey, plainSHA256Hex)
 	if err != nil {
@@ -46,7 +52,11 @@ func SealChunk(masterKey []byte, plainSHA256Hex string, plain []byte) ([]byte, e
 	return sealed, nil
 }
 
-// OpenChunk reverses SealChunk and verifies both the AEAD tag and the chunk hash.
+// OpenChunk authenticates and decrypts a SealChunk envelope, then decompresses
+// it. masterKey and the exact plainSHA256Hex string must match those used to
+// seal it. It returns errors for malformed hashes, short envelopes, key or
+// cipher setup failures, authentication failures, and invalid compressed data.
+// Callers must check the returned plaintext's hash themselves.
 func OpenChunk(masterKey []byte, plainSHA256Hex string, sealed []byte) ([]byte, error) {
 	key, err := deriveChunkKey(masterKey, plainSHA256Hex)
 	if err != nil {
@@ -72,6 +82,7 @@ func OpenChunk(masterKey []byte, plainSHA256Hex string, sealed []byte) ([]byte, 
 	return plain, nil
 }
 
+// zstdEncode returns src compressed as a zstd frame, or an encoder setup error.
 func zstdEncode(src []byte) ([]byte, error) {
 	enc, err := zstd.NewWriter(nil, zstd.WithEncoderLevel(zstd.SpeedDefault))
 	if err != nil {
@@ -81,6 +92,7 @@ func zstdEncode(src []byte) ([]byte, error) {
 	return enc.EncodeAll(src, nil), nil
 }
 
+// zstdDecode decompresses zstd data, returning decoder setup or decoding errors.
 func zstdDecode(src []byte) ([]byte, error) {
 	dec, err := zstd.NewReader(nil)
 	if err != nil {

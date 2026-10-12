@@ -24,6 +24,8 @@ type CheckResult struct {
 }
 
 // RunCheck opens the repository and prints a structural consistency report.
+// It checks object presence without reading chunk contents. Missing referenced
+// objects and repository or manifest errors fail the check; garbage alone does not.
 func RunCheck(identityPath, remote string) error {
 	backend := storage.NewRcloneBackend(remote)
 	spinner, _ := pterm.DefaultSpinner.Start("Checking repository...")
@@ -42,6 +44,11 @@ func RunCheck(identityPath, remote string) error {
 	return nil
 }
 
+// runCheck compares hashes referenced by snapshots or the index with data
+// object names, returning sorted missing and garbage hashes. It does not verify
+// chunk contents. Snapshot listing failures are treated as an empty listing;
+// repository, index, manifest, and data listing errors are returned. Missing
+// objects return an error with the report; garbage alone is not an error.
 func runCheck(identityPath string, backend storage.Backend) (CheckResult, error) {
 	var res CheckResult
 

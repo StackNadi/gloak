@@ -34,6 +34,7 @@ type epochFile struct {
 	Entries []Entry `json:"entries"`
 }
 
+// New returns an empty index with no pending entries and an epoch counter of zero.
 func New() *Index {
 	return &Index{
 		pending: make(map[string]Entry),
@@ -41,11 +42,12 @@ func New() *Index {
 	}
 }
 
-// Load merges every index epoch in ascending name order. Epochs that cannot
-// be decrypted with the identity are skipped: the caller still has the data
-// objects, and the next Save rewrites what is missing. The epoch counter is
-// restored from the highest epoch name seen so a later Save never reuses a
-// name that already exists on the backend.
+// Load merges readable index files in ascending name order, with later entries
+// replacing earlier entries for the same plaintext hash. Listing failures yield
+// an empty index; malformed listing JSON returns an error. Files that cannot be
+// downloaded, decrypted, read, or parsed are skipped. Skipped entries are not
+// queued for Save. The epoch counter is restored from the highest recognized
+// epoch name, including skipped files.
 func Load(backend storage.Backend, identityPath string) (*Index, error) {
 	ix := New()
 
@@ -123,6 +125,7 @@ func parseEpoch(path string) (int, bool) {
 	return epoch, true
 }
 
+// Has reports whether a plaintext hash is known, including pending entries.
 func (ix *Index) Has(hash string) bool {
 	_, ok := ix.Get(hash)
 	return ok
@@ -146,6 +149,8 @@ func (ix *Index) AllHashes() []string {
 	return out
 }
 
+// Get looks up a plaintext hash, preferring a pending entry. It returns the
+// zero entry and false when the hash is unknown.
 func (ix *Index) Get(hash string) (Entry, bool) {
 	if e, ok := ix.pending[hash]; ok {
 		return e, true
@@ -154,15 +159,17 @@ func (ix *Index) Get(hash string) (Entry, bool) {
 	return e, ok
 }
 
+// Add records an entry by its plaintext hash and queues it for the next Save,
+// replacing any entry with the same hash.
 func (ix *Index) Add(entry Entry) {
 	ix.pending[entry.PlainSHA256] = entry
 	ix.all[entry.PlainSHA256] = entry
 }
 
-// Compact writes a single new epoch containing only liveHashes (intersected
-// with known entries), then returns. Callers delete old epochs separately.
-// The epoch counter continues from the highest existing name so the new
-// file never collides with a prior epoch.
+// Compact writes a new epoch containing known entries marked true in liveHashes
+// and returns the number written, or zero without writing if none match.
+// It leaves ix unchanged and returns encryption or upload errors from Save.
+// Callers delete old epochs separately.
 func (ix *Index) Compact(backend storage.Backend, recipients []string, liveHashes map[string]bool) (int, error) {
 	// Reuse Save by replacing all and pending with the live subset, then
 	// force a save even if pending is empty (when there is something to write).
@@ -182,8 +189,10 @@ func (ix *Index) Compact(backend storage.Backend, recipients []string, liveHashe
 	return next.Save(backend, recipients)
 }
 
-// Save writes only the pending entries as the next epoch. It is a no-op when
-// nothing is pending, so a second backup of unchanged data writes no files.
+// Save writes only the pending entries as the next encrypted epoch and returns
+// the number written. It is a no-op when nothing is pending. Pending entries
+// are cleared and the epoch counter advances only after a successful upload;
+// serialization, encryption, and upload errors leave them unchanged.
 func (ix *Index) Save(backend storage.Backend, recipients []string) (int, error) {
 	if len(ix.pending) == 0 {
 		return 0, nil

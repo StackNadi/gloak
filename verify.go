@@ -15,6 +15,9 @@ type VerifyCmd struct {
 	Remote   string `help:"Source Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:"" short:"R"`
 }
 
+// Run verifies the backup using the selected or default identity and sends an
+// optional completion notification. Access, decryption, and integrity errors
+// are returned.
 func (v *VerifyCmd) Run() error {
 	pterm.Info.Println("Starting VERIFY process...")
 
