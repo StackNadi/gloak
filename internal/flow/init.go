@@ -8,8 +8,9 @@ import (
 )
 
 // RunInit creates a new gloak repository on remote and prints the outcome.
-// Zero min/avg/max select the package defaults. With force it overwrites an
-// existing repository, which makes old snapshots unreadable.
+// Zero min/avg/max select the package defaults; sizes are in bytes. With force
+// it overwrites an existing repository, which makes old snapshots unreadable.
+// Validation, encryption, and storage errors from repo.Init are returned.
 func RunInit(recipients []string, remote string, min, avg, max int64, force bool) error {
 	if min == 0 {
 		min = repo.DefaultChunkMin
@@ -36,6 +37,8 @@ func RunInit(recipients []string, remote string, min, avg, max int64, force bool
 	return nil
 }
 
+// runInit delegates to repo.Init and returns its master key, config, and error.
+// Chunk bounds are byte counts and are passed through without defaults.
 func runInit(recipients []string, backend storage.Backend, min, avg, max int64, force bool) ([]byte, repo.Config, error) {
 	return repo.Init(backend, recipients, min, avg, max, force)
 }

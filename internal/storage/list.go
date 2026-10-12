@@ -8,6 +8,8 @@ type ListEntry struct {
 	IsDir bool   `json:"IsDir"`
 }
 
+// ParseList decodes rclone lsjson output, returning a JSON decoding error for
+// malformed or incompatible input. Unknown fields are ignored.
 func ParseList(raw []byte) ([]ListEntry, error) {
 	var entries []ListEntry
 	if err := json.Unmarshal(raw, &entries); err != nil {

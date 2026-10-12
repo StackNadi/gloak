@@ -27,12 +27,20 @@ type PruneResult struct {
 }
 
 // RunPrune opens the repository and runs the prune flow. Without apply,
-// nothing is deleted; the result describes the plan only.
+// nothing is deleted; the result describes the plan only. It returns an error
+// for an all-zero policy or a failed repository operation. An apply error may
+// follow partial deletions, reflected in the returned counts.
 func RunPrune(identityPath, remote string, policy RetentionPolicy, apply bool) (PruneResult, error) {
 	backend := storage.NewRcloneBackend(remote)
 	return runPrune(identityPath, backend, policy, apply)
 }
 
+// runPrune plans retention and garbage collection, deleting dead snapshots and
+// unreferenced chunks and compacting the index only when apply is true.
+// An all-zero policy or unreadable snapshot returns an error. Data listing
+// failures are treated as no additional objects; invalid snapshot timestamps
+// use the zero time. Other repository, manifest, and deletion errors return
+// the results accumulated so far, without undoing earlier deletions.
 func runPrune(identityPath string, backend storage.Backend, policy RetentionPolicy, apply bool) (PruneResult, error) {
 	var res PruneResult
 
@@ -203,8 +211,10 @@ func runPrune(identityPath string, backend storage.Backend, policy RetentionPoli
 	return res, nil
 }
 
-// compactIndex rewrites the index as a single new epoch containing only the
-// live hashes, then deletes prior epochs.
+// compactIndex writes a new epoch for known live hashes, if any, then attempts
+// to delete prior epochs. Listing failures are treated as an empty listing and
+// old-epoch deletion errors are ignored. Repository opening, listing parsing,
+// and compaction errors are returned before deleting old epochs.
 func compactIndex(backend storage.Backend, identityPath string, ix *index.Index, live map[string]bool) error {
 	r, err := repo.Open(backend, identityPath)
 	if err != nil {

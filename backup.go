@@ -19,6 +19,9 @@ type BackupCmd struct {
 	Remote       string `short:"R" required:"" help:"Repository remote, e.g. b2:my-bucket/gloak"`
 }
 
+// Run backs up the selected path, using the default identity when none is
+// specified, and sends an optional completion notification. Identity path
+// expansion and backup errors are returned; notification failures are ignored.
 func (c *BackupCmd) Run(ctx *kong.Context) error {
 	identityPath := c.Identity
 	if identityPath == "" {
@@ -41,7 +44,8 @@ func (c *BackupCmd) Run(ctx *kong.Context) error {
 	return nil
 }
 
-// expandHome resolves a leading ~ in path to the user's home directory.
+// expandHome resolves ~ or a leading ~/ to the user's home directory,
+// returning a home lookup error if expansion fails. Other paths are unchanged.
 func expandHome(path string) (string, error) {
 	if path != "~" && !strings.HasPrefix(path, "~/") {
 		return path, nil

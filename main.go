@@ -26,8 +26,9 @@ var cli struct {
 }
 
 // getDefaultDir returns the directory for identity, recipient, and helper
-// files. GLOAK_DIR overrides the default (~/.gloak). A leading ~ in
-// GLOAK_DIR is expanded.
+// files. GLOAK_DIR overrides the default (~/.gloak); ~ and a leading ~/ are
+// expanded when the home directory is available. If home lookup fails, it
+// returns GLOAK_DIR unchanged when set, or .gloak relative to the current directory.
 func getDefaultDir() string {
 	if dir := os.Getenv("GLOAK_DIR"); dir != "" {
 		if expanded, err := expandHome(dir); err == nil {

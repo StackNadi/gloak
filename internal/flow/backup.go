@@ -31,7 +31,10 @@ type BackupResult struct {
 	TotalPlainBytes int64
 }
 
-// RunBackup backs up filePath into the repository on remote using identityPath.
+// RunBackup backs up a file or directory into the repository on remote using
+// identityPath and returns the new snapshot UUID. Directory backups skip
+// symlinks and special files. It returns filesystem, repository, encryption,
+// and storage errors; failed backups may leave uploaded chunks and index epochs.
 func RunBackup(filePath, identityPath, remote string) (string, error) {
 	backend := storage.NewRcloneBackend(remote)
 	snapshotID := core.GenerateUUID()
@@ -51,8 +54,9 @@ func RunBackup(filePath, identityPath, remote string) (string, error) {
 	return res.SnapshotID, nil
 }
 
-// runBackupPath dispatches to the file or tree backup flow based on whether
-// filePath is a regular file or a directory.
+// runBackupPath validates snapshotID as a UUID and dispatches directories to
+// tree backup, all other paths to file backup. It returns stat or backup errors.
+// A non-nil progress callback receives the cumulative number of processed chunks.
 func runBackupPath(filePath, identityPath string, backend storage.Backend, snapshotID string, progress func(int)) (BackupResult, error) {
 	if _, err := uuid.Parse(snapshotID); err != nil {
 		return BackupResult{}, fmt.Errorf("invalid snapshot id: %w", err)
@@ -75,6 +79,11 @@ func runBackupPath(filePath, identityPath string, backend storage.Backend, snaps
 	return runBackup(filePath, identityPath, backend, snapshotID, progress)
 }
 
+// runBackup writes a file snapshot under snapshotID, reusing indexed chunks.
+// progress, when non-nil, receives the cumulative chunk count including reused
+// chunks. It returns statistics on success and a zero result on invalid UUIDs,
+// filesystem, repository, encryption, or storage errors. Uploaded objects and
+// saved index checkpoints remain after failures.
 func runBackup(filePath, identityPath string, backend storage.Backend, snapshotID string, progress func(int)) (BackupResult, error) {
 	if _, err := uuid.Parse(snapshotID); err != nil {
 		return BackupResult{}, fmt.Errorf("invalid snapshot id: %w", err)

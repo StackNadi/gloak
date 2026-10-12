@@ -19,6 +19,11 @@ import (
 	"gloak/internal/storage"
 )
 
+// RunRestore restores a standalone file backup or repository snapshot to
+// outputDir. For trees, pathFilter selects an exact relative path and its
+// descendants; empty selects all entries. File backups ignore the filter.
+// Access, decryption, integrity, and filesystem errors are returned; existing
+// files may be truncated and partial output remains on failure.
 func RunRestore(snapshotID, identityPath, remote, outputDir, pathFilter string) error {
 	backend := storage.NewRcloneBackend(remote)
 	outputPath, err := runRestore(snapshotID, outputDir, identityPath, backend, pathFilter)
@@ -29,6 +34,10 @@ func RunRestore(snapshotID, identityPath, remote, outputDir, pathFilter string) 
 	return nil
 }
 
+// runRestore restores a backup and returns the output file path or tree root.
+// A downloadable locator selects standalone file mode; any locator download
+// failure falls back to the repository flow. pathFilter applies only to trees.
+// Repository, manifest, and restore errors are returned without cleaning up output.
 func runRestore(snapshotID, outputDir, identityPath string, backend storage.Backend, pathFilter string) (string, error) {
 	if isFileMode(backend, snapshotID) {
 		return runFileRestore(snapshotID, identityPath, outputDir, backend)
@@ -47,6 +56,11 @@ func runRestore(snapshotID, outputDir, identityPath string, backend storage.Back
 	return runFileRestoreFromManifest(fileM, r, backend, outputDir)
 }
 
+// runFileRestoreFromManifest writes a repository file snapshot under outputDir
+// and returns its path, truncating any existing file. It checks chunk plaintext
+// sizes and hashes and the overall payload hash. Invalid names or chunk paths,
+// filesystem, download, decryption, and integrity errors can leave partial output;
+// file close errors are ignored.
 func runFileRestoreFromManifest(manifest *core.Manifest, r *repo.Repo, backend storage.Backend, outputDir string) (string, error) {
 	if filepath.Base(manifest.OriginalName) != manifest.OriginalName {
 		return "", fmt.Errorf("invalid original filename in manifest: %s", manifest.OriginalName)
@@ -89,6 +103,12 @@ func runFileRestoreFromManifest(manifest *core.Manifest, r *repo.Repo, backend s
 	return outputPath, nil
 }
 
+// runTreeRestore restores entries below a root named for the first source
+// path, falling back to the snapshot UUID for an empty, . or root basename.
+// pathFilter selects an exact slash-separated path and its descendants; empty
+// selects all. It returns the destination root even when nothing matches.
+// Missing source paths, unsafe entry paths, unknown selected entry types, and
+// filesystem or chunk restore errors are returned; partial output remains.
 func runTreeRestore(m *core.TreeManifest, r *repo.Repo, outputDir, pathFilter string, backend storage.Backend) (string, error) {
 	if len(m.Paths) == 0 {
 		return "", fmt.Errorf("tree snapshot has no source paths")
@@ -182,6 +202,11 @@ func runTreeRestore(m *core.TreeManifest, r *repo.Repo, outputDir, pathFilter st
 	return destRoot, nil
 }
 
+// restoreTreeFile creates or truncates target, writes verified plaintext chunks,
+// and attempts to restore its modification time. New files use entry.Mode's
+// permission bits, subject to the umask. Path, download, decryption, checksum,
+// and file open/write errors are returned and can leave a partial file.
+// Invalid timestamps, timestamp update failures, and close errors are ignored.
 func restoreTreeFile(entry core.TreeEntry, r *repo.Repo, backend storage.Backend, target string) error {
 	mode := os.FileMode(entry.Mode) & 0777
 	outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)

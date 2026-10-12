@@ -31,8 +31,9 @@ func (c TelegramConfig) Enabled() bool {
 	return c.Token != "" && c.ChatID != ""
 }
 
-// Send posts a short text report. It never returns an error that should
-// fail the host command; callers log a warning.
+// Send posts message to Telegram, truncating it to 4000 bytes with an ellipsis.
+// It does nothing when credentials are incomplete. It uses a 15-second HTTP
+// timeout and returns request errors or errors for non-200 responses.
 func (c TelegramConfig) Send(message string) error {
 	if !c.Enabled() {
 		return nil
@@ -73,6 +74,8 @@ func redact(msg, token string) string {
 	return strings.ReplaceAll(msg, token, "[redacted]")
 }
 
+// truncate limits s to n bytes, ending shortened text with "...". It may split
+// a UTF-8 sequence and requires n >= 3 when truncation is needed.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s

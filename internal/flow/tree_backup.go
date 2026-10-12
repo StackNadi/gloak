@@ -20,6 +20,12 @@ import (
 	"gloak/internal/storage"
 )
 
+// runTreeBackup records directories and regular files in a tree snapshot,
+// skipping symlinks and special files and reusing indexed chunks. A non-nil
+// progress callback receives the cumulative processed chunk count. It returns
+// statistics on success, or a zero result for path, filesystem, repository,
+// encryption, or storage errors. Uploaded chunks and index checkpoints remain
+// on failure; a failed hostname lookup leaves the hostname empty.
 func runTreeBackup(dirPath, identityPath string, backend storage.Backend, snapshotID string, progress func(int)) (BackupResult, error) {
 	r, err := repo.Open(backend, identityPath)
 	if err != nil {

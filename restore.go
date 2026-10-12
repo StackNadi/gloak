@@ -17,6 +17,9 @@ type RestoreCmd struct {
 	PathFilter string `help:"Restore only this relative path (and children) from a tree snapshot."`
 }
 
+// Run restores the backup using the selected or default identity and sends an
+// optional completion notification. Restore errors are returned, and failed
+// restores may leave partial output.
 func (r *RestoreCmd) Run() error {
 	pterm.Info.Println("Starting RESTORE process...")
 

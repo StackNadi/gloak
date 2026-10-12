@@ -16,6 +16,8 @@ type UploadCmd struct {
 	Remote    string `short:"R" required:"" help:"Remote root, e.g. keraaaki:backups or /mnt/backups"`
 }
 
+// Run resolves recipients and uploads a standalone encrypted backup, printing
+// its UUID on success. Recipient resolution and upload errors are returned.
 func (u *UploadCmd) Run() error {
 	recipients, err := resolveInitRecipients(u.Recipient)
 	if err != nil {

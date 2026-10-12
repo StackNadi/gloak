@@ -14,6 +14,8 @@ type CheckCmd struct {
 	Remote   string `help:"Source Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:"" short:"R"`
 }
 
+// Run checks repository structure using the selected or default identity and
+// sends an optional completion notification. Check errors are returned.
 func (c *CheckCmd) Run() error {
 	pterm.Info.Println("Starting CHECK process...")
 

@@ -61,8 +61,10 @@ func readTreeManifest(backend storage.Backend, identityPath, snapshotID string) 
 	return manifest, nil
 }
 
-// readAnyManifest decrypts a snapshot and returns its kind. kind is
-// core.KindFile or core.KindTree; exactly one of file/tree is non-nil.
+// readAnyManifest decrypts a snapshot and returns its kind. On success, kind is
+// core.KindFile or core.KindTree and exactly one manifest pointer is non-nil.
+// An absent or empty kind means file. Invalid snapshot IDs, unknown kinds,
+// download, decryption, and JSON errors are returned.
 func readAnyManifest(backend storage.Backend, identityPath, snapshotID string) (string, *core.Manifest, *core.TreeManifest, error) {
 	path, err := repo.SnapshotPath(snapshotID)
 	if err != nil {
@@ -100,6 +102,8 @@ func readAnyManifest(backend storage.Backend, identityPath, snapshotID string) (
 	}
 }
 
+// decryptSnapshotBytes decrypts sealed age data using the identity file at
+// identityPath. It returns identity loading, decryption, and plaintext read errors.
 func decryptSnapshotBytes(identityPath string, sealed []byte) ([]byte, error) {
 	reader, err := crypto.DecryptReader(identityPath, bytes.NewReader(sealed))
 	if err != nil {
@@ -112,8 +116,8 @@ func decryptSnapshotBytes(identityPath string, sealed []byte) ([]byte, error) {
 	return plain, nil
 }
 
-// validateChunkPath rejects manifest chunk paths that fall outside data/ or
-// contain traversal segments.
+// validateChunkPath requires the data/ prefix and rejects any occurrence of
+// "..". It performs no filesystem lookup or further path validation.
 func validateChunkPath(path string) error {
 	if !strings.HasPrefix(path, repo.DataPrefix+"/") || strings.Contains(path, "..") {
 		return fmt.Errorf("chunk path escapes data prefix: %s", path)

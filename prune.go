@@ -20,6 +20,8 @@ type PruneCmd struct {
 	Yes         bool   `help:"Actually delete. Without this flag prune is a dry run."`
 }
 
+// Run prints a retention plan, applying deletions only when Yes is set.
+// It returns prune errors and sends an optional notification after a successful apply.
 func (c *PruneCmd) Run() error {
 	pterm.Info.Println("Starting PRUNE process...")
 	ident := c.Identity

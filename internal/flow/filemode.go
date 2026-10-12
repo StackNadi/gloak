@@ -14,11 +14,17 @@ import (
 	"gloak/internal/storage"
 )
 
+// isFileMode reports whether backupID/locator.json can be downloaded.
+// It does not parse the locator, and any download error yields false.
 func isFileMode(backend storage.Backend, backupID string) bool {
 	var buf bytes.Buffer
 	return backend.Download(backupID+"/locator.json", &buf) == nil
 }
 
+// readFileManifest loads a standalone backup's locator and encrypted manifest.
+// It checks both UUIDs, the manifest version, and that OriginalName equals its
+// filepath.Base. Locator download failures become an incomplete-or-missing
+// backup error; JSON, manifest download, identity, and decryption errors are returned.
 func readFileManifest(backend storage.Backend, identityPath, backupID string) (fileManifest, error) {
 	var loc fileLocator
 	var locBuf bytes.Buffer
@@ -60,6 +66,8 @@ func readFileManifest(backend storage.Backend, identityPath, backupID string) (f
 	return m, nil
 }
 
+// decodeFileMasterKey decodes the manifest's hex key, returning an error if it
+// is malformed or does not contain exactly 32 bytes.
 func decodeFileMasterKey(m fileManifest) ([]byte, error) {
 	key, err := hex.DecodeString(m.MasterKey)
 	if err != nil || len(key) != masterKeySize {
@@ -68,6 +76,11 @@ func decodeFileMasterKey(m fileManifest) ([]byte, error) {
 	return key, nil
 }
 
+// runFileRestore restores a standalone backup under outputDir and returns the
+// output path. It creates parent directories and truncates an existing output
+// file. Manifest, key, chunk path, download, decryption, checksum, and filesystem
+// errors are returned; a failure can leave a partial file. File close errors
+// are ignored.
 func runFileRestore(backupID, identityPath, outputDir string, backend storage.Backend) (string, error) {
 	m, err := readFileManifest(backend, identityPath, backupID)
 	if err != nil {
@@ -116,6 +129,10 @@ func runFileRestore(backupID, identityPath, outputDir string, backend storage.Ba
 	return outputPath, nil
 }
 
+// runFileVerify reads a standalone backup without writing restored files.
+// It verifies encrypted and plaintext chunk sizes and hashes, authentication,
+// and the overall payload hash, returning manifest, key, path, download,
+// decryption, or integrity errors.
 func runFileVerify(backupID, identityPath string, backend storage.Backend) error {
 	m, err := readFileManifest(backend, identityPath, backupID)
 	if err != nil {

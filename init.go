@@ -20,6 +20,8 @@ type InitCmd struct {
 	PQ        bool   `help:"Reserve post-quantum hybrid recipients (not implemented yet)."`
 }
 
+// Run initializes the repository with the resolved recipients and chunk bounds.
+// It rejects PQ mode and returns recipient resolution or initialization errors.
 func (c *InitCmd) Run() error {
 	if c.PQ {
 		return fmt.Errorf("--pq hybrid recipients are not implemented yet (reserved for a later phase)")
@@ -32,10 +34,11 @@ func (c *InitCmd) Run() error {
 }
 
 // resolveInitRecipients turns the --recipient value into a key list. An empty
-// path falls back to ~/.gloak/recipient.txt. A value that looks like keys
+// value uses recipient.txt in getDefaultDir(). A value that looks like keys
 // (starts with age1, ssh-ed25519, ssh-rsa, or contains commas) is split on
 // commas; anything else is treated as a file path with one key per line,
-// skipping blanks and # comments.
+// skipping blanks and # comments. It returns file read errors and rejects
+// empty lists; key validity is checked by callers.
 func resolveInitRecipients(path string) ([]string, error) {
 	if path == "" {
 		path = filepath.Join(getDefaultDir(), "recipient.txt")
@@ -57,6 +60,9 @@ func resolveInitRecipients(path string) ([]string, error) {
 	return readRecipientFile(path)
 }
 
+// looksLikeInlineKeys reports whether s has a supported key prefix or a comma,
+// so recipient resolution treats it as inline keys rather than a file path.
+// It does not validate the keys.
 func looksLikeInlineKeys(s string) bool {
 	return strings.HasPrefix(s, "age1") ||
 		strings.HasPrefix(s, "ssh-ed25519 ") ||
@@ -64,6 +70,9 @@ func looksLikeInlineKeys(s string) bool {
 		strings.Contains(s, ",")
 }
 
+// readRecipientFile returns trimmed, nonempty lines other than # comments.
+// It returns an error if the file cannot be read or contains no such lines;
+// the returned keys are not validated.
 func readRecipientFile(path string) ([]string, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {

@@ -30,7 +30,8 @@ func Path(dir string) string {
 }
 
 // Load reads path and parses it. A missing file yields an empty Config and
-// a nil error. A malformed file returns a descriptive error.
+// a nil error. Other read errors and TOML parsing errors are returned with an
+// empty Config.
 func Load(path string) (Config, error) {
 	var cfg Config
 	data, err := os.ReadFile(path)

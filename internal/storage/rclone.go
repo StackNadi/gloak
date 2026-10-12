@@ -23,10 +23,14 @@ type Backend interface {
 	Delete(remotePath string) error
 }
 
+// NewRcloneBackend uses remote as the storage root and leaves rclone's default
+// configuration in effect until ConfigPath is set.
 func NewRcloneBackend(remote string) *RcloneBackend {
 	return &RcloneBackend{Remote: remote}
 }
 
+// rcloneArgs copies base and appends a --config option only when configPath is
+// nonempty, leaving base unchanged.
 func rcloneArgs(configPath string, base ...string) []string {
 	args := append([]string{}, base...)
 	if configPath != "" {
@@ -47,6 +51,8 @@ func IsMissingPath(err error) bool {
 	return false
 }
 
+// Upload streams in to remotePath relative to Remote, creating or replacing
+// the object. It returns rclone execution errors, including input read failures.
 func (r *RcloneBackend) Upload(remotePath string, in io.Reader) error {
 	fullDest := fmt.Sprintf("%s/%s", r.Remote, remotePath)
 
@@ -63,6 +69,9 @@ func (r *RcloneBackend) Upload(remotePath string, in io.Reader) error {
 	return nil
 }
 
+// Download writes the object at remotePath relative to Remote to out.
+// It returns rclone execution errors, including output write failures; out may
+// have received partial data when an error is returned.
 func (r *RcloneBackend) Download(remotePath string, out io.Writer) error {
 	fullSrc := fmt.Sprintf("%s/%s", r.Remote, remotePath)
 

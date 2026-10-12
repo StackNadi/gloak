@@ -48,8 +48,11 @@ func SnapshotPath(snapshotID string) (string, error) {
 
 // Init creates the repository on the backend: one wrapped master key per
 // recipient first, repo.json last as the completion marker. It refuses to
-// touch a repository that already exists unless force is set, because a
-// fresh master key would orphan every snapshot sealed with the old one.
+// overwrite a readable repo.json unless force is set; download errors during
+// that existence check are treated as absence. A fresh master key makes old
+// snapshots unreadable. min, avg, and max are positive, ordered byte counts.
+// It returns the new master key and config, or a validation, encryption, or
+// storage error. Failed initialization may leave uploaded objects behind.
 func Init(backend storage.Backend, recipients []string, min, avg, max int64, force bool) ([]byte, Config, error) {
 	if len(recipients) == 0 {
 		return nil, Config{}, fmt.Errorf("at least one recipient is required")
@@ -145,7 +148,10 @@ func deleteStaleKeys(backend storage.Backend, recipients []string) error {
 	return nil
 }
 
-// Open loads repo.json and unwraps the master key with the given identity.
+// Open loads repo.json and unwraps a 32-byte master key using identityPath.
+// Config download, parsing, format, chunk-bound, and key-listing errors are
+// returned. Individual key download, decryption, and read failures are skipped;
+// if no key opens, it returns an identity-cannot-open error.
 func Open(backend storage.Backend, identityPath string) (*Repo, error) {
 	var buf bytes.Buffer
 	if err := backend.Download(ConfigPath, &buf); err != nil {

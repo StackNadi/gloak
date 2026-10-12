@@ -42,6 +42,8 @@ type fileLocator struct {
 	UUID    string `json:"uuid"`
 }
 
+// fileChunkName formats an index as chunk_ followed by a decimal number padded
+// to at least five digits.
 func fileChunkName(index int) string {
 	return fmt.Sprintf("chunk_%05d", index)
 }
@@ -54,7 +56,10 @@ func validateFileChunkName(name string) error {
 	return nil
 }
 
-// RunUpload seals filePath into a self-contained {uuid}/ folder on backend.
+// RunUpload seals filePath into a self-contained {uuid}/ folder on backend and
+// returns that UUID. Chunks contain up to core.ChunkSize bytes. It writes the
+// locator last as a completion marker. Empty recipients, file read, encryption,
+// and upload errors are returned; uploaded objects remain after a failure.
 func RunUpload(filePath string, recipients []string, backend storage.Backend) (string, error) {
 	if len(recipients) == 0 {
 		return "", fmt.Errorf("at least one recipient is required")

@@ -13,9 +13,10 @@ import (
 )
 
 // resolveTelegram merges Telegram credentials from the config file with
-// environment overrides. The file at <gloak-dir>/config.toml provides the
-// base values; GLOAK_TELEGRAM_TOKEN and GLOAK_TELEGRAM_CHAT_ID win when set.
-// A malformed config file only warns; notify stays best-effort.
+// nonempty environment overrides. The file at <gloak-dir>/config.toml provides
+// the base values; GLOAK_TELEGRAM_TOKEN and GLOAK_TELEGRAM_CHAT_ID win when nonempty.
+// Unreadable or malformed configuration is ignored, leaving environment values
+// available for notifications.
 func resolveTelegram() notify.TelegramConfig {
 	fileCfg, err := config.Load(config.Path(getDefaultDir()))
 	if err != nil {
@@ -35,9 +36,8 @@ func resolveTelegram() notify.TelegramConfig {
 }
 
 // notifyCommand sends a short best-effort report after a successful command.
-// details are optional lines rendered as-is under the header. Missing
-// credentials or network failures only print a warning; they never fail the
-// host command. The token itself is never printed.
+// Nonempty details are rendered as-is under the header. Missing credentials
+// skip the send; send failures do not fail the host command.
 func notifyCommand(command string, details ...string) {
 	cfg := resolveTelegram()
 	if !cfg.Enabled() {

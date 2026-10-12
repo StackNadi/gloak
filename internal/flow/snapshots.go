@@ -21,6 +21,9 @@ type SnapshotInfo struct {
 	Detail    string
 }
 
+// RunSnapshots prints the repository's snapshot summaries, or a message when
+// the list is empty. It returns repository or snapshot loading errors and
+// ignores table rendering errors.
 func RunSnapshots(identityPath, remote string) error {
 	backend := storage.NewRcloneBackend(remote)
 	infos, err := runSnapshots(identityPath, backend)
@@ -38,6 +41,8 @@ func RunSnapshots(identityPath, remote string) error {
 	return nil
 }
 
+// snapshotRows returns table rows in input order, with UUID, kind, creation
+// time, hostname, and detail columns, without a header.
 func snapshotRows(infos []SnapshotInfo) [][]string {
 	rows := make([][]string, 0, len(infos))
 	for _, info := range infos {
@@ -46,6 +51,10 @@ func snapshotRows(infos []SnapshotInfo) [][]string {
 	return rows
 }
 
+// runSnapshots loads file and tree snapshot summaries, sorted by descending
+// creation-time text and then ascending UUID. Snapshot listing failures yield
+// an empty result; repository opening, listing parsing, and manifest errors
+// are returned.
 func runSnapshots(identityPath string, backend storage.Backend) ([]SnapshotInfo, error) {
 	if _, err := repo.Open(backend, identityPath); err != nil {
 		return nil, err
