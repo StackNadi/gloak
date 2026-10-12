@@ -18,6 +18,7 @@
 - `init` and `upload` accept SSH public keys (`ssh-ed25519`, `ssh-rsa`) as recipients alongside age X25519 keys.
 - `init --pq` is reserved for post-quantum hybrid recipients and currently returns a clear not-implemented error.
 - Optional Telegram notify via `GLOAK_TELEGRAM_TOKEN` / `GLOAK_TELEGRAM_CHAT_ID` after commands; the message includes path or snapshot, useful counts, and duration. Failures warn only. Token is never printed.
+- `GLOAK_DIR` overrides the default key directory (`~/.gloak`) for every command that resolves a default path: `keygen`, `init`, `backup`, `restore`, `verify`, `snapshots`, `prune`, `check`, and `setup`. A leading `~` is expanded.
 
 ### Changed
 
