@@ -25,7 +25,16 @@ var cli struct {
 	Setup     SetupCmd     `cmd:"" help:"Download and install rclone to ~/.gloak/bin/."`
 }
 
+// getDefaultDir returns the directory for identity, recipient, and helper
+// files. GLOAK_DIR overrides the default (~/.gloak). A leading ~ in
+// GLOAK_DIR is expanded.
 func getDefaultDir() string {
+	if dir := os.Getenv("GLOAK_DIR"); dir != "" {
+		if expanded, err := expandHome(dir); err == nil {
+			return expanded
+		}
+		return dir
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."

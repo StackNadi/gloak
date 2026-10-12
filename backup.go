@@ -15,12 +15,16 @@ import (
 // BackupCmd backs up a file or directory into a gloak repository.
 type BackupCmd struct {
 	ExistingFile string `arg:"" name:"path" help:"File or directory to back up"`
-	Identity     string `short:"i" default:"~/.gloak/identity.txt" help:"Path to identity file"`
+	Identity     string `short:"i" help:"Path to identity file (defaults to $GLOAK_DIR/identity.txt, or ~/.gloak/identity.txt)."`
 	Remote       string `short:"R" required:"" help:"Repository remote, e.g. b2:my-bucket/gloak"`
 }
 
 func (c *BackupCmd) Run(ctx *kong.Context) error {
-	identityPath, err := expandHome(c.Identity)
+	identityPath := c.Identity
+	if identityPath == "" {
+		identityPath = filepath.Join(getDefaultDir(), "identity.txt")
+	}
+	identityPath, err := expandHome(identityPath)
 	if err != nil {
 		return err
 	}

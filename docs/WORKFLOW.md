@@ -21,6 +21,12 @@ gloak init -R myremote:backups -r ~/.gloak/recipient.txt
 
 `init` creates the storage layout on your remote. You only run it once per remote location.
 
+By default keys live under `~/.gloak`. Set `GLOAK_DIR` (or pass `-o` to `keygen`) to keep them somewhere else. A leading `~` in `GLOAK_DIR` is expanded:
+
+```bash
+export GLOAK_DIR=~/backups/gloak-keys
+```
+
 Prefer SSH keys for recipients? Pass the public key line directly:
 
 ```bash

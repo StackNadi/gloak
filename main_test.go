@@ -166,3 +166,38 @@ func TestResolveInitRecipientsMissingFileErrors(t *testing.T) {
 		t.Fatalf("resolveInitRecipients() error = %q, want gloak keygen mention", err)
 	}
 }
+
+func TestGetDefaultDirUsesGLOAK_DIR(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "custom-gloak")
+	t.Setenv("GLOAK_DIR", dir)
+
+	if got := getDefaultDir(); got != dir {
+		t.Fatalf("getDefaultDir() = %q, want %q", got, dir)
+	}
+}
+
+func TestGetDefaultDirExpandsTildeInGLOAK_DIR(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("no home dir: %v", err)
+	}
+	t.Setenv("GLOAK_DIR", "~/custom-gloak")
+
+	want := filepath.Join(home, "custom-gloak")
+	if got := getDefaultDir(); got != want {
+		t.Fatalf("getDefaultDir() = %q, want %q", got, want)
+	}
+}
+
+func TestGetDefaultDirFallsBackToHomeWhenUnset(t *testing.T) {
+	t.Setenv("GLOAK_DIR", "")
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("no home dir: %v", err)
+	}
+	want := filepath.Join(home, ".gloak")
+	if got := getDefaultDir(); got != want {
+		t.Fatalf("getDefaultDir() = %q, want %q", got, want)
+	}
+}
