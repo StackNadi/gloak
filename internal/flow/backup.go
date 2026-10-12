@@ -44,9 +44,7 @@ func RunBackup(filePath, identityPath, remote string) (string, error) {
 		_ = spinner.Stop()
 		return "", err
 	}
-	_ = spinner.Stop()
-
-	pterm.Success.Println("Backup complete")
+	spinner.Success("Backup complete")
 	pterm.Printf("Snapshot ID: %s\n", res.SnapshotID)
 	pterm.Printf("Chunks: %d total, %d uploaded, %d skipped\n", res.TotalChunks, res.UploadedChunks, res.SkippedChunks)
 	pterm.Printf("Data size: %d bytes\n", res.TotalPlainBytes)

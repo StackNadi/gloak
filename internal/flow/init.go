@@ -28,8 +28,7 @@ func RunInit(recipients []string, remote string, min, avg, max int64, force bool
 		_ = spinner.Stop()
 		return err
 	}
-	_ = spinner.Stop()
-	pterm.Success.Println("Repository initialized")
+	spinner.Success("Repository initialized")
 	pterm.Printf("Location: %s\n", remote)
 	pterm.Printf("Recipients: %v\n", cfg.Recipients)
 	pterm.Printf("Chunk bounds: min=%d avg=%d max=%d bytes\n", cfg.ChunkMin, cfg.ChunkAvg, cfg.ChunkMax)

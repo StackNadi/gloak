@@ -22,8 +22,7 @@ func RunVerify(snapshotID, identityPath, remote string) error {
 		_ = spinner.Stop()
 		return err
 	}
-	_ = spinner.Stop()
-	pterm.Success.Println("Backup verified successfully")
+	spinner.Success("Backup verified successfully")
 	return nil
 }
 
