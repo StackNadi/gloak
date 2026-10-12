@@ -4,6 +4,7 @@ go 1.26.3
 
 require (
 	filippo.io/age v1.3.1
+	github.com/BurntSushi/toml v1.6.0
 	github.com/alecthomas/kong v1.15.0
 	github.com/google/uuid v1.6.0
 	github.com/klauspost/compress v1.20.1

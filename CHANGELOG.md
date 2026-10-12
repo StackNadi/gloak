@@ -17,7 +17,7 @@
 - `gloak prune --keep-last N --keep-daily N --keep-weekly N --keep-monthly N` reclaims space with time-based retention. Dry run by default; `--yes` deletes dead snapshots and unreferenced chunks, then compacts the index into a single epoch.
 - `init` and `upload` accept SSH public keys (`ssh-ed25519`, `ssh-rsa`) as recipients alongside age X25519 keys.
 - `init --pq` is reserved for post-quantum hybrid recipients and currently returns a clear not-implemented error.
-- Optional Telegram notify via `GLOAK_TELEGRAM_TOKEN` / `GLOAK_TELEGRAM_CHAT_ID` after commands; the message includes path or snapshot, useful counts, and duration. Failures warn only. Token is never printed.
+- Optional Telegram notify after commands; the message includes path or snapshot, useful counts, and duration. Credentials come from `[telegram]` in `<gloak-dir>/config.toml` (TOML), with `GLOAK_TELEGRAM_TOKEN` / `GLOAK_TELEGRAM_CHAT_ID` overriding the file when set. Failures warn only. Token is never printed.
 - `GLOAK_DIR` overrides the default key directory (`~/.gloak`) for every command that resolves a default path: `keygen`, `init`, `backup`, `restore`, `verify`, `snapshots`, `prune`, `check`, and `setup`. A leading `~` is expanded.
 
 ### Changed

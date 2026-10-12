@@ -112,7 +112,15 @@ At least one keep flag is required. Without `--yes`, prune only prints the plan.
 
 ## Optional: notify on Telegram
 
-Set two environment variables and gloak sends a short status report after backup, restore, verify, check, or prune. The message includes the path or snapshot, useful counts, and how long the command took:
+gloak sends a short status report after backup, restore, verify, check, or prune. Put the credentials in `~/.gloak/config.toml` (or `$GLOAK_DIR/config.toml`):
+
+```toml
+[telegram]
+token = "123456:ABC..."
+chat_id = "your-chat-id"
+```
+
+Environment variables override the file when set, which is handy for containers or one-off runs:
 
 ```bash
 export GLOAK_TELEGRAM_TOKEN="123456:ABC..."
