@@ -59,3 +59,23 @@ func TestSendHTTPError(t *testing.T) {
 		t.Fatal("Send() succeeded on HTTP error")
 	}
 }
+
+func TestSendRedactsTokenFromTransportError(t *testing.T) {
+	// Nothing listens on this port, so the transport error embeds the
+	// request URL, which contains the bot token.
+	c := TelegramConfig{
+		Token:   "SECRETTOKEN123",
+		ChatID:  "1",
+		BaseURL: "http://127.0.0.1:1",
+	}
+	err := c.Send("x")
+	if err == nil {
+		t.Fatal("Send() succeeded against an unreachable server")
+	}
+	if strings.Contains(err.Error(), "SECRETTOKEN123") {
+		t.Fatalf("error leaks the bot token: %v", err)
+	}
+	if !strings.Contains(err.Error(), "[redacted]") {
+		t.Fatalf("error = %v, want the token placeholder", err)
+	}
+}

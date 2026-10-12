@@ -61,6 +61,14 @@ func runBackupPath(filePath, identityPath string, backend storage.Backend, snaps
 	if err != nil {
 		return BackupResult{}, fmt.Errorf("failed to stat path: %w", err)
 	}
+	// Advisory shared lock: a concurrent exclusive prune must not run
+	// while this backup writes.
+	release, err := acquireRepoLock(backend, "backup", true)
+	if err != nil {
+		return BackupResult{}, err
+	}
+	defer release()
+
 	if info.IsDir() {
 		return runTreeBackup(filePath, identityPath, backend, snapshotID, progress)
 	}

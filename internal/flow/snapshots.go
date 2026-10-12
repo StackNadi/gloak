@@ -52,8 +52,12 @@ func runSnapshots(identityPath string, backend storage.Backend) ([]SnapshotInfo,
 	}
 	raw, err := backend.ListFiles([]string{repo.SnapshotsPrefix})
 	if err != nil {
-		// Fresh repo with no snapshots directory.
-		return nil, nil
+		// Fresh repo with no snapshots directory; anything else is a
+		// real listing failure and must surface.
+		if storage.IsMissingPath(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to list snapshots: %w", err)
 	}
 	entries, err := storage.ParseList(raw)
 	if err != nil {

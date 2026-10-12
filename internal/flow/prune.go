@@ -36,12 +36,24 @@ func RunPrune(identityPath, remote string, policy RetentionPolicy, apply bool) (
 func runPrune(identityPath string, backend storage.Backend, policy RetentionPolicy, apply bool) (PruneResult, error) {
 	var res PruneResult
 
+	if policy.KeepLast < 0 || policy.KeepDaily < 0 || policy.KeepWeekly < 0 || policy.KeepMonthly < 0 {
+		return res, fmt.Errorf("retention counts must be non-negative")
+	}
 	if policy.isEmpty() {
 		return res, fmt.Errorf("refusing to prune with no retention rules (pass at least one --keep-* flag)")
 	}
 
 	if _, err := repo.Open(backend, identityPath); err != nil {
 		return res, err
+	}
+	if apply {
+		// Advisory exclusive lock: no backup (shared) may run while
+		// prune deletes, and no other prune may overlap.
+		release, err := acquireRepoLock(backend, "prune", false)
+		if err != nil {
+			return res, err
+		}
+		defer release()
 	}
 	ix, err := index.Load(backend, identityPath)
 	if err != nil {
@@ -51,7 +63,11 @@ func runPrune(identityPath string, backend storage.Backend, policy RetentionPoli
 	// List snapshots.
 	snapRaw, err := backend.ListFiles([]string{repo.SnapshotsPrefix})
 	if err != nil {
-		return res, fmt.Errorf("failed to list snapshots: %w", err)
+		if !storage.IsMissingPath(err) {
+			return res, fmt.Errorf("failed to list snapshots: %w", err)
+		}
+		// A fresh repo has no snapshots/ directory yet.
+		snapRaw = []byte("[]")
 	}
 	snapEntries, err := storage.ParseList(snapRaw)
 	if err != nil {
@@ -128,7 +144,11 @@ func runPrune(identityPath string, backend storage.Backend, policy RetentionPoli
 	// Also scan data/ for objects not in the live set (orphans).
 	dataPaths, err := backend.ListRecursive([]string{repo.DataPrefix})
 	if err != nil {
-		// No data/ is fine.
+		// A fresh repo has no data/ directory yet; anything else is a
+		// real listing failure and must not be pruned around.
+		if !storage.IsMissingPath(err) {
+			return res, fmt.Errorf("failed to list data objects: %w", err)
+		}
 		dataPaths = nil
 	}
 	seenGarbage := make(map[string]bool, len(garbage))
@@ -150,7 +170,16 @@ func runPrune(identityPath string, backend storage.Backend, policy RetentionPoli
 		return res, nil
 	}
 
-	// Delete dead snapshots.
+	// Compact the index first: the new epoch drops hashes no kept
+	// snapshot references. If this fails, nothing has been deleted yet.
+	if err := compactIndex(backend, identityPath, ix, live); err != nil {
+		return res, err
+	}
+	res.CompactedEpochs = true
+
+	// Delete dead snapshots. Their exclusive chunks are already gone from
+	// the index but the data objects are still present, so an interrupted
+	// prune leaves the repository consistent.
 	for _, id := range res.DeadSnapshots {
 		sp, err := repo.SnapshotPath(id)
 		if err != nil {
@@ -162,7 +191,7 @@ func runPrune(identityPath string, backend storage.Backend, policy RetentionPoli
 		res.DeletedSnapshots++
 	}
 
-	// Delete garbage data objects.
+	// Delete garbage data objects last, once nothing references them.
 	for _, h := range garbage {
 		dp := repo.DataPath(h)
 		if err := backend.Delete(dp); err != nil {
@@ -170,12 +199,6 @@ func runPrune(identityPath string, backend storage.Backend, policy RetentionPoli
 		}
 		res.DeletedObjects++
 	}
-
-	// Compact index: write one epoch with live entries only, delete old epochs.
-	if err := compactIndex(backend, identityPath, ix, live); err != nil {
-		return res, err
-	}
-	res.CompactedEpochs = true
 
 	return res, nil
 }
@@ -191,6 +214,9 @@ func compactIndex(backend storage.Backend, identityPath string, ix *index.Index,
 	// List current epochs before compacting so we can delete the old ones.
 	oldRaw, err := backend.ListFiles([]string{"index"})
 	if err != nil {
+		if !storage.IsMissingPath(err) {
+			return fmt.Errorf("failed to list index epochs: %w", err)
+		}
 		oldRaw = []byte("[]")
 	}
 	oldEntries, err := storage.ParseList(oldRaw)
@@ -210,9 +236,12 @@ func compactIndex(backend storage.Backend, identityPath string, ix *index.Index,
 		return fmt.Errorf("failed to write compacted index: %w", err)
 	}
 
-	// Delete every epoch that existed before compaction.
+	// Delete every epoch that existed before compaction. A failure here
+	// leaves the old epochs in place, which Load merges harmlessly.
 	for _, name := range oldEpochs {
-		_ = backend.Delete("index/" + name)
+		if err := backend.Delete("index/" + name); err != nil {
+			return fmt.Errorf("failed to delete old index epoch %s: %w", name, err)
+		}
 	}
 	return nil
 }

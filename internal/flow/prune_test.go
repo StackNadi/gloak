@@ -1,10 +1,14 @@
 package flow
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
+
+	"gloak/internal/storage"
 )
 
 func TestSelectKeepSnapshotsLastOnly(t *testing.T) {
@@ -53,6 +57,66 @@ func TestRunPruneRejectsEmptyPolicy(t *testing.T) {
 	_, err := runPrune(ident, backend, RetentionPolicy{}, false)
 	if err == nil {
 		t.Fatal("runPrune() succeeded with empty policy")
+	}
+}
+
+func TestRunPruneRejectsNegativePolicy(t *testing.T) {
+	ident, backend, _ := repoFixture(t)
+	for _, policy := range []RetentionPolicy{
+		{KeepLast: -1},
+		{KeepDaily: -1},
+		{KeepWeekly: -1},
+		{KeepMonthly: -1, KeepLast: 1},
+	} {
+		if _, err := runPrune(ident, backend, policy, false); err == nil {
+			t.Fatalf("runPrune() succeeded with negative policy %+v", policy)
+		}
+	}
+}
+
+// failDeleteBackend fails Delete for paths under failPrefix.
+type failDeleteBackend struct {
+	storage.Backend
+	failPrefix string
+}
+
+func (b *failDeleteBackend) Delete(remotePath string) error {
+	if strings.HasPrefix(remotePath, b.failPrefix) {
+		return fmt.Errorf("delete %s failed", remotePath)
+	}
+	return b.Backend.Delete(remotePath)
+}
+
+func TestRunPruneCompactsIndexBeforeDeletingAnything(t *testing.T) {
+	ident, backend, _ := repoFixture(t)
+	f1 := filepath.Join(t.TempDir(), "one.txt")
+	if err := os.WriteFile(f1, []byte("content-one-unique"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	f2 := filepath.Join(t.TempDir(), "two.txt")
+	if err := os.WriteFile(f2, []byte("content-two-different"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := runBackup(f1, ident, backend, "7f91c6c7-7a0b-44aa-ae23-997b60e4e998", nil); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1100 * time.Millisecond)
+	if _, err := runBackup(f2, ident, backend, "8f91c6c7-7a0b-44aa-ae23-997b60e4e999", nil); err != nil {
+		t.Fatal(err)
+	}
+
+	wrapped := &failDeleteBackend{Backend: backend, failPrefix: "index/"}
+	_, err := runPrune(ident, wrapped, RetentionPolicy{KeepLast: 1}, true)
+	if err == nil {
+		t.Fatal("runPrune() succeeded despite index epoch deletion failure")
+	}
+	// Compaction runs first: when it fails, no snapshot or object has
+	// been touched yet.
+	if !backend.Has("snapshots/7f91c6c7-7a0b-44aa-ae23-997b60e4e998.age") {
+		t.Fatal("dead snapshot deleted before compaction finished")
+	}
+	if err := runVerify("8f91c6c7-7a0b-44aa-ae23-997b60e4e999", ident, backend); err != nil {
+		t.Fatalf("kept snapshot broken after failed prune: %v", err)
 	}
 }
 

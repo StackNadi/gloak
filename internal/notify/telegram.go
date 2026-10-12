@@ -50,7 +50,7 @@ func (c TelegramConfig) Send(message string) error {
 	client := &http.Client{Timeout: 15 * time.Second}
 	resp, err := client.Post(endpoint, "application/x-www-form-urlencoded", strings.NewReader(form.Encode()))
 	if err != nil {
-		return fmt.Errorf("telegram send: %w", err)
+		return fmt.Errorf("telegram send: %s", redact(err.Error(), c.Token))
 	}
 	defer resp.Body.Close()
 
@@ -59,9 +59,18 @@ func (c TelegramConfig) Send(message string) error {
 			Description string `json:"description"`
 		}
 		_ = json.NewDecoder(resp.Body).Decode(&body)
-		return fmt.Errorf("telegram send: status %d: %s", resp.StatusCode, body.Description)
+		return fmt.Errorf("telegram send: status %d: %s", resp.StatusCode, redact(body.Description, c.Token))
 	}
 	return nil
+}
+
+// redact removes the bot token from a message. Transport errors embed the
+// full request URL, which contains the token.
+func redact(msg, token string) string {
+	if token == "" {
+		return msg
+	}
+	return strings.ReplaceAll(msg, token, "[redacted]")
 }
 
 func truncate(s string, n int) string {

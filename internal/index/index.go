@@ -53,8 +53,12 @@ func Load(backend storage.Backend, identityPath string) (*Index, error) {
 	if err != nil {
 		// A fresh repo has no index/ directory yet (rclone lsjson exits 3
 		// on a missing directory); that is normal, so treat the listing as
-		// empty and start from epoch 0.
-		return ix, nil
+		// empty and start from epoch 0. Any other listing failure is a real
+		// error and must not be mistaken for an empty index.
+		if storage.IsMissingPath(err) {
+			return ix, nil
+		}
+		return nil, fmt.Errorf("failed to list index: %w", err)
 	}
 	entries, err := storage.ParseList(raw)
 	if err != nil {

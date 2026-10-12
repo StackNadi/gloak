@@ -2,14 +2,30 @@ package index
 
 import (
 	"bytes"
+	"errors"
+	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"gloak/internal/crypto"
+	"gloak/internal/storage"
 	"gloak/internal/storage/memtest"
 )
+
+// listErrorBackend fails every listing with err while staying usable for
+// anything else, so Load error handling can be exercised.
+type listErrorBackend struct {
+	storage.Backend
+	err error
+}
+
+func (b *listErrorBackend) ListFiles(prefix []string) ([]byte, error) {
+	return nil, b.err
+}
 
 func identityFixture(t *testing.T) (string, string) {
 	t.Helper()
@@ -185,6 +201,36 @@ func TestLoadOnEmptyBackendIsClean(t *testing.T) {
 	}
 	if len(loaded.all) != 0 {
 		t.Fatalf("Load() on empty backend = %+v", loaded.all)
+	}
+}
+
+func TestLoadTreatsMissingPathAsEmpty(t *testing.T) {
+	_, ident := identityFixture(t)
+	// rclone exits 3 when the remote path is missing; that is a fresh repo.
+	exitErr := exec.Command("sh", "-c", "exit 3").Run()
+	backend := &listErrorBackend{
+		Backend: memtest.NewMemoryBackend(),
+		err:     fmt.Errorf("failed to list index: %w", exitErr),
+	}
+	loaded, err := Load(backend, ident)
+	if err != nil {
+		t.Fatalf("Load() error: %v", err)
+	}
+	if len(loaded.AllHashes()) != 0 {
+		t.Fatalf("Load() on missing index = %v, want empty", loaded.AllHashes())
+	}
+}
+
+func TestLoadPropagatesListingErrors(t *testing.T) {
+	_, ident := identityFixture(t)
+	backend := &listErrorBackend{
+		Backend: memtest.NewMemoryBackend(),
+		err:     errors.New("remote exploded"),
+	}
+	if _, err := Load(backend, ident); err == nil {
+		t.Fatal("Load() succeeded on a real listing error")
+	} else if !strings.Contains(err.Error(), "remote exploded") {
+		t.Fatalf("Load() error = %v, want it to wrap the listing failure", err)
 	}
 }
 

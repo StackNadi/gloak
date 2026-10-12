@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -92,14 +93,33 @@ func runTreeRestore(m *core.TreeManifest, r *repo.Repo, outputDir, pathFilter st
 	if len(m.Paths) == 0 {
 		return "", fmt.Errorf("tree snapshot has no source paths")
 	}
+	// The manifest is remote input: fall back to the snapshot UUID when
+	// the recorded root name is not a single safe path segment, and
+	// reject the manifest when even the UUID is unsafe.
 	rootName := filepath.Base(filepath.Clean(m.Paths[0]))
-	if rootName == "" || rootName == "." || rootName == string(filepath.Separator) {
+	if err := core.ValidateRelPath(rootName); err != nil {
 		rootName = m.UUID
+	}
+	if err := core.ValidateRelPath(rootName); err != nil {
+		return "", fmt.Errorf("unsafe restore root name: %w", err)
 	}
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create output directory: %w", err)
 	}
 	destRoot := filepath.Join(outputDir, rootName)
+	// Defense in depth: the join above must stay under outputDir.
+	if rel, err := filepath.Rel(outputDir, destRoot); err != nil ||
+		rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("restore root escapes output directory: %s", rootName)
+	}
+
+	type dirSetting struct {
+		path  string
+		mode  os.FileMode
+		mtime time.Time
+	}
+	var dirSettings []dirSetting
+	var matched int
 
 	for _, entry := range m.Entries {
 		if err := core.ValidateRelPath(entry.RelPath); err != nil {
@@ -110,6 +130,7 @@ func runTreeRestore(m *core.TreeManifest, r *repo.Repo, outputDir, pathFilter st
 				continue
 			}
 		}
+		matched++
 		target := filepath.Join(destRoot, filepath.FromSlash(entry.RelPath))
 		// Defense in depth: ensure target stays under destRoot.
 		if !strings.HasPrefix(target, destRoot+string(filepath.Separator)) && target != destRoot {
@@ -117,9 +138,19 @@ func runTreeRestore(m *core.TreeManifest, r *repo.Repo, outputDir, pathFilter st
 		}
 		switch entry.Type {
 		case "dir":
-			if err := os.MkdirAll(target, os.FileMode(entry.Mode)&0777); err != nil {
+			// Keep the directory writable while children are restored;
+			// the recorded mode is applied after the loop.
+			if err := os.MkdirAll(target, 0700); err != nil {
 				return "", fmt.Errorf("failed to create directory %s: %w", entry.RelPath, err)
 			}
+			if err := os.Chmod(target, 0700); err != nil {
+				return "", fmt.Errorf("failed to open directory %s for restore: %w", entry.RelPath, err)
+			}
+			setting := dirSetting{path: target, mode: os.FileMode(entry.Mode) & 0777}
+			if mt, err := time.Parse(time.RFC3339, entry.Mtime); err == nil {
+				setting.mtime = mt
+			}
+			dirSettings = append(dirSettings, setting)
 		case "file":
 			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 				return "", fmt.Errorf("failed to create parent for %s: %w", entry.RelPath, err)
@@ -131,13 +162,39 @@ func runTreeRestore(m *core.TreeManifest, r *repo.Repo, outputDir, pathFilter st
 			return "", fmt.Errorf("unknown tree entry type %q for %s", entry.Type, entry.RelPath)
 		}
 	}
+	if pathFilter != "" && matched == 0 {
+		return "", fmt.Errorf("path filter %q matches nothing in snapshot %s", pathFilter, m.UUID)
+	}
+
+	// Apply directory modes after every child is written, deepest paths
+	// first so a read-only parent never blocks chmod on its children.
+	sort.Slice(dirSettings, func(i, j int) bool {
+		return len(dirSettings[i].path) > len(dirSettings[j].path)
+	})
+	for _, d := range dirSettings {
+		if err := os.Chmod(d.path, d.mode); err != nil {
+			return "", fmt.Errorf("failed to set mode on %s: %w", d.path, err)
+		}
+		if !d.mtime.IsZero() {
+			_ = os.Chtimes(d.path, d.mtime, d.mtime)
+		}
+	}
 	return destRoot, nil
 }
 
 func restoreTreeFile(entry core.TreeEntry, r *repo.Repo, backend storage.Backend, target string) error {
-	outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(entry.Mode)&0777)
+	mode := os.FileMode(entry.Mode) & 0777
+	outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
-		return fmt.Errorf("failed to create output file %s: %w", entry.RelPath, err)
+		// An earlier restore may have left the file read-only; make it
+		// writable once and retry.
+		if chmodErr := os.Chmod(target, mode|0200); chmodErr != nil {
+			return fmt.Errorf("failed to create output file %s: %w", entry.RelPath, err)
+		}
+		outFile, err = os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+		if err != nil {
+			return fmt.Errorf("failed to create output file %s: %w", entry.RelPath, err)
+		}
 	}
 	defer outFile.Close()
 
@@ -159,6 +216,11 @@ func restoreTreeFile(entry core.TreeEntry, r *repo.Repo, backend storage.Backend
 		if _, err := outFile.Write(plain); err != nil {
 			return fmt.Errorf("failed to write chunk %d: %w", meta.Index, err)
 		}
+	}
+	// Re-applying the mode matters when the file already existed (a
+	// previous restore may have left it read-only or writable).
+	if err := os.Chmod(target, mode); err != nil {
+		return fmt.Errorf("failed to set mode on %s: %w", entry.RelPath, err)
 	}
 	if mt, err := time.Parse(time.RFC3339, entry.Mtime); err == nil {
 		_ = os.Chtimes(target, mt, mt)

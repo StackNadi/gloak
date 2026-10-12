@@ -55,7 +55,11 @@ func runCheck(identityPath string, backend storage.Backend) (CheckResult, error)
 
 	snapRaw, err := backend.ListFiles([]string{repo.SnapshotsPrefix})
 	if err != nil {
-		// A fresh repo has no snapshots/ directory yet; treat as empty.
+		// A fresh repo has no snapshots/ directory yet; only a confirmed
+		// missing path may be treated as empty, other failures are real.
+		if !storage.IsMissingPath(err) {
+			return res, fmt.Errorf("failed to list snapshots: %w", err)
+		}
 		snapRaw = []byte("[]")
 	}
 	snapEntries, err := storage.ParseList(snapRaw)
@@ -93,7 +97,10 @@ func runCheck(identityPath string, backend storage.Backend) (CheckResult, error)
 
 	dataPaths, err := backend.ListRecursive([]string{repo.DataPrefix})
 	if err != nil {
-		return res, fmt.Errorf("failed to list data objects: %w", err)
+		if !storage.IsMissingPath(err) {
+			return res, fmt.Errorf("failed to list data objects: %w", err)
+		}
+		dataPaths = nil
 	}
 	present := make(map[string]bool, len(dataPaths))
 	for _, p := range dataPaths {

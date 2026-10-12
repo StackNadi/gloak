@@ -49,6 +49,38 @@ func TestInitWritesKeysAndConfig(t *testing.T) {
 	}
 }
 
+func TestInitRemovesStaleKeysOnReinit(t *testing.T) {
+	pubA, identA := testRecipient(t)
+	pubB, identB := testRecipient(t)
+	backend := memtest.NewMemoryBackend()
+
+	if _, _, err := Init(backend, []string{pubA}, 1, 8, 64, false); err != nil {
+		t.Fatalf("Init() error: %v", err)
+	}
+	// A wrapped key for a recipient that is about to be removed.
+	stalePath := KeysPrefix + "/0000000000000000.age"
+	backend.Put(stalePath, []byte("stale"))
+
+	if _, _, err := Init(backend, []string{pubB}, 1, 8, 64, true); err != nil {
+		t.Fatalf("Init(force) error: %v", err)
+	}
+	if backend.Has(stalePath) {
+		t.Fatal("stale key survived a force re-init")
+	}
+	if backend.Has(KeysPathFor(pubA)) {
+		t.Fatal("removed recipient still has a wrapped key")
+	}
+	if !backend.Has(KeysPathFor(pubB)) {
+		t.Fatal("new recipient key missing")
+	}
+	if _, err := Open(backend, identB); err != nil {
+		t.Fatalf("Open() with the new identity: %v", err)
+	}
+	if _, err := Open(backend, identA); err == nil {
+		t.Fatal("removed recipient can still open the repository")
+	}
+}
+
 func TestOpenWithEachRecipientIdentity(t *testing.T) {
 	pubA, identA := testRecipient(t)
 	pubB, identB := testRecipient(t)

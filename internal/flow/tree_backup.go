@@ -38,19 +38,27 @@ func runTreeBackup(dirPath, identityPath string, backend storage.Backend, snapsh
 	if err != nil {
 		return BackupResult{}, err
 	}
+	// Resolve symlinks before the walk: walking a symlinked root never
+	// matches the root itself, and every relative path would start with
+	// ../, producing a silently empty snapshot. The manifest keeps the
+	// path the user passed so restore still uses the familiar name.
+	resolved, err := filepath.EvalSymlinks(abs)
+	if err != nil {
+		return BackupResult{}, fmt.Errorf("failed to resolve %s: %w", abs, err)
+	}
 
 	var entries []core.TreeEntry
 	var sinceCheckpoint int
 	res := BackupResult{SnapshotID: snapshotID}
 
-	walkErr := filepath.WalkDir(abs, func(p string, d fs.DirEntry, walkErr error) error {
+	walkErr := filepath.WalkDir(resolved, func(p string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
-		if p == abs {
+		if p == resolved {
 			return nil
 		}
-		rel, err := filepath.Rel(abs, p)
+		rel, err := filepath.Rel(resolved, p)
 		if err != nil {
 			return err
 		}

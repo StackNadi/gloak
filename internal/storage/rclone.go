@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -32,6 +33,18 @@ func rcloneArgs(configPath string, base ...string) []string {
 		args = append(args, "--config", configPath)
 	}
 	return args
+}
+
+// IsMissingPath reports whether err was caused by rclone exiting with
+// status 3, which rclone uses when the remote path does not exist.
+// Callers that treat a missing directory as an empty listing must check
+// this so a genuine listing failure is never swallowed.
+func IsMissingPath(err error) bool {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode() == 3
+	}
+	return false
 }
 
 func (r *RcloneBackend) Upload(remotePath string, in io.Reader) error {

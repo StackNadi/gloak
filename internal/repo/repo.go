@@ -93,6 +93,14 @@ func Init(backend storage.Backend, recipients []string, min, avg, max int64, for
 		}
 	}
 
+	// Force re-init (or a retry after a crashed init) can leave wrapped
+	// keys for recipients that are no longer part of the repository. Remove
+	// them before repo.json, the completion marker, is replaced, so a
+	// removed recipient cannot keep opening the repository.
+	if err := deleteStaleKeys(backend, recipients); err != nil {
+		return nil, Config{}, err
+	}
+
 	cfgBytes, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return nil, Config{}, fmt.Errorf("failed to marshal repo config: %w", err)
@@ -101,6 +109,40 @@ func Init(backend storage.Backend, recipients []string, min, avg, max int64, for
 		return nil, Config{}, fmt.Errorf("failed to upload repo.json: %w", err)
 	}
 	return master, cfg, nil
+}
+
+// deleteStaleKeys removes wrapped keys under keys/ whose fingerprint is
+// not part of recipients. A missing keys/ directory is normal on first
+// init; any other listing failure is returned.
+func deleteStaleKeys(backend storage.Backend, recipients []string) error {
+	keep := make(map[string]bool, len(recipients))
+	for _, recipient := range recipients {
+		keep[KeysPathFor(recipient)] = true
+	}
+	raw, err := backend.ListFiles([]string{KeysPrefix})
+	if err != nil {
+		if storage.IsMissingPath(err) {
+			return nil
+		}
+		return fmt.Errorf("failed to list keys: %w", err)
+	}
+	entries, err := storage.ParseList(raw)
+	if err != nil {
+		return fmt.Errorf("failed to parse keys listing: %w", err)
+	}
+	for _, entry := range entries {
+		if entry.IsDir {
+			continue
+		}
+		full := KeysPrefix + "/" + entry.Path
+		if keep[full] {
+			continue
+		}
+		if err := backend.Delete(full); err != nil {
+			return fmt.Errorf("failed to delete stale key %s: %w", full, err)
+		}
+	}
+	return nil
 }
 
 // Open loads repo.json and unwraps the master key with the given identity.
