@@ -23,7 +23,7 @@ gloak splits one file into fixed-size chunks, encrypts each chunk with age, uplo
 keygen -> chunk -> encrypt chunks -> upload -> verify -> restore
 ```
 
-Full usage guide: [docs/GUIDE.md](docs/GUIDE.md)
+Full usage guide: [docs/WORKFLOW.md](docs/WORKFLOW.md)
 
 ---
 
