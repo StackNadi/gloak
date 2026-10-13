@@ -129,7 +129,6 @@ A repository (`gloak init` and `gloak backup`) keeps a content-addressed layout 
 | Feature | Reasoning |
 |---------|-----------|
 | Named storage profiles | `--remote my-backups` instead of typing URIs. |
-| Telegram integration | Hermes Agent plugin for backup/restore/verify via Telegram. |
 | Per-chunk data keys | Each chunk would use its own data key stored inside the encrypted manifest. This would limit key exposure if a key leaks. |
 
 ---
