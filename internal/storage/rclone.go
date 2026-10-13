@@ -2,6 +2,7 @@ package storage
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os/exec"
@@ -9,7 +10,8 @@ import (
 )
 
 type RcloneBackend struct {
-	Remote     string
+	Remote string
+	// ConfigPath is optional. When empty, rclone uses its own default config.
 	ConfigPath string
 }
 
@@ -17,20 +19,44 @@ type Backend interface {
 	Upload(remotePath string, in io.Reader) error
 	Download(remotePath string, out io.Writer) error
 	ListFiles(prefix []string) ([]byte, error)
+	ListRecursive(prefix []string) ([]string, error)
 	Delete(remotePath string) error
 }
 
+// NewRcloneBackend uses remote as the storage root and leaves rclone's default
+// configuration in effect until ConfigPath is set.
 func NewRcloneBackend(remote string) *RcloneBackend {
-	return &RcloneBackend{
-		Remote:     remote,
-		ConfigPath: "/home/keraki/.config/rclone/rclone.conf",
-	}
+	return &RcloneBackend{Remote: remote}
 }
 
+// rcloneArgs copies base and appends a --config option only when configPath is
+// nonempty, leaving base unchanged.
+func rcloneArgs(configPath string, base ...string) []string {
+	args := append([]string{}, base...)
+	if configPath != "" {
+		args = append(args, "--config", configPath)
+	}
+	return args
+}
+
+// IsMissingPath reports whether err was caused by rclone exiting with
+// status 3, which rclone uses when the remote path does not exist.
+// Callers that treat a missing directory as an empty listing must check
+// this so a genuine listing failure is never swallowed.
+func IsMissingPath(err error) bool {
+	var exitErr *exec.ExitError
+	if errors.As(err, &exitErr) {
+		return exitErr.ExitCode() == 3
+	}
+	return false
+}
+
+// Upload streams in to remotePath relative to Remote, creating or replacing
+// the object. It returns rclone execution errors, including input read failures.
 func (r *RcloneBackend) Upload(remotePath string, in io.Reader) error {
 	fullDest := fmt.Sprintf("%s/%s", r.Remote, remotePath)
 
-	cmd := exec.Command("rclone", "rcat", "--config", r.ConfigPath, fullDest)
+	cmd := exec.Command("rclone", rcloneArgs(r.ConfigPath, "rcat", fullDest)...)
 
 	cmd.Stdin = in
 
@@ -43,10 +69,13 @@ func (r *RcloneBackend) Upload(remotePath string, in io.Reader) error {
 	return nil
 }
 
+// Download writes the object at remotePath relative to Remote to out.
+// It returns rclone execution errors, including output write failures; out may
+// have received partial data when an error is returned.
 func (r *RcloneBackend) Download(remotePath string, out io.Writer) error {
 	fullSrc := fmt.Sprintf("%s/%s", r.Remote, remotePath)
 
-	cmd := exec.Command("rclone", "cat", "--config", r.ConfigPath, fullSrc)
+	cmd := exec.Command("rclone", rcloneArgs(r.ConfigPath, "cat", fullSrc)...)
 
 	cmd.Stdout = out
 
@@ -68,7 +97,7 @@ func (r *RcloneBackend) ListFiles(prefix []string) ([]byte, error) {
 		remotePath = fmt.Sprintf("%s/%s", r.Remote, strings.Join(prefix, "/"))
 	}
 
-	cmd := exec.Command("rclone", "lsjson", "--config", r.ConfigPath, remotePath)
+	cmd := exec.Command("rclone", rcloneArgs(r.ConfigPath, "lsjson", remotePath)...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -80,16 +109,51 @@ func (r *RcloneBackend) ListFiles(prefix []string) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
-// Delete removes a file or directory at the given remote path using rclone purge.
+// ListRecursive lists every file under prefix, recursively. Paths are
+// returned in the same remote-relative shape as Upload keys.
+func (r *RcloneBackend) ListRecursive(prefix []string) ([]string, error) {
+	remotePath := r.Remote
+	if len(prefix) > 0 {
+		remotePath = fmt.Sprintf("%s/%s", r.Remote, strings.Join(prefix, "/"))
+	}
+
+	cmd := exec.Command("rclone", rcloneArgs(r.ConfigPath, "lsjson", "-R", remotePath)...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		return nil, fmt.Errorf("failed to list %s via rclone lsjson: %w\nRclone Error: %s", remotePath, err, stderr.String())
+	}
+
+	entries, err := ParseList(stdout.Bytes())
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse recursive listing: %w", err)
+	}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
+		if e.IsDir {
+			continue
+		}
+		if len(prefix) > 0 {
+			out = append(out, strings.Join(append(append([]string{}, prefix...), e.Path), "/"))
+		} else {
+			out = append(out, e.Path)
+		}
+	}
+	return out, nil
+}
+
+// Delete removes a single file at the given remote path using rclone
+// deletefile. Purge is for directories; deletefile is for files.
 func (r *RcloneBackend) Delete(remotePath string) error {
 	fullPath := fmt.Sprintf("%s/%s", r.Remote, remotePath)
 
-	cmd := exec.Command("rclone", "purge", "--config", r.ConfigPath, fullPath)
+	cmd := exec.Command("rclone", rcloneArgs(r.ConfigPath, "deletefile", fullPath)...)
 
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("failed to delete %s via rclone purge: %w\nRclone Error: %s", fullPath, err, stderr.String())
+		return fmt.Errorf("failed to delete %s via rclone deletefile: %w\nRclone Error: %s", fullPath, err, stderr.String())
 	}
 
 	return nil

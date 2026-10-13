@@ -13,16 +13,29 @@ import (
 var cli struct {
 	Debug bool `help:"Enable debug mode." short:"d"`
 
-	Keygen  KeygenCmd  `cmd:"" help:"Generate an X25519 identity and recipient file."`
-	Upload  UploadCmd  `cmd:"" help:"Encrypt, chunk, and upload a file to a storage destination."`
-	Resume  ResumeCmd  `cmd:"" help:"Validate saved state for an interrupted upload."`
-	Restore RestoreCmd `cmd:"" help:"Restore and decrypt a backup from storage."`
-	Verify  VerifyCmd  `cmd:"" help:"Verify backup chunks and checksums."`
-	Cleanup CleanupCmd `cmd:"" help:"Remove orphan backup directories missing manifest.age."`
-	Setup   SetupCmd   `cmd:"" help:"Download and install rclone to ~/.gloak/bin/."`
+	Keygen    KeygenCmd    `cmd:"" help:"Generate an X25519 identity and recipient file."`
+	Init      InitCmd      `cmd:"" help:"Initialize a new gloak repository." group:"Repository"`
+	Backup    BackupCmd    `cmd:"" help:"Encrypt, chunk, and upload a file or directory to a repository."`
+	Upload    UploadCmd    `cmd:"" help:"Encrypt and upload a file as a standalone folder (no repository)."`
+	Restore   RestoreCmd   `cmd:"" help:"Restore and decrypt a backup from storage."`
+	Verify    VerifyCmd    `cmd:"" help:"Verify backup chunks and checksums."`
+	Snapshots SnapshotsCmd `cmd:"" help:"List snapshots in the repository."`
+	Prune     PruneCmd     `cmd:"" help:"Remove dead snapshots and unreferenced chunks (dry run by default)."`
+	Check     CheckCmd     `cmd:"" help:"Check repository consistency (structural)."`
+	Setup     SetupCmd     `cmd:"" help:"Download and install rclone to ~/.gloak/bin/."`
 }
 
+// getDefaultDir returns the directory for identity, recipient, and helper
+// files. GLOAK_DIR overrides the default (~/.gloak); ~ and a leading ~/ are
+// expanded when the home directory is available. If home lookup fails, it
+// returns GLOAK_DIR unchanged when set, or .gloak relative to the current directory.
 func getDefaultDir() string {
+	if dir := os.Getenv("GLOAK_DIR"); dir != "" {
+		if expanded, err := expandHome(dir); err == nil {
+			return expanded
+		}
+		return dir
+	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		home = "."

@@ -1,0 +1,93 @@
+package main
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+
+	"gloak/internal/flow"
+)
+
+// InitCmd creates a new gloak repository.
+type InitCmd struct {
+	Remote    string `short:"R" required:"" help:"Repository remote, e.g. b2:my-bucket/gloak or local path"`
+	Recipient string `short:"r" help:"Recipient public key file or comma-separated keys (default ~/.gloak/recipient.txt)"`
+	Force     bool   `short:"f" help:"Overwrite an existing repository (makes old snapshots unreadable)"`
+	ChunkMin  int64  `help:"Minimum CDC chunk size in bytes (default 524288)."`
+	ChunkAvg  int64  `help:"Average CDC chunk size in bytes (default 1048576)."`
+	ChunkMax  int64  `help:"Maximum CDC chunk size in bytes (default 8388608)."`
+	PQ        bool   `help:"Reserve post-quantum hybrid recipients (not implemented yet)."`
+}
+
+// Run initializes the repository with the resolved recipients and chunk bounds.
+// It rejects PQ mode and returns recipient resolution or initialization errors.
+func (c *InitCmd) Run() error {
+	if c.PQ {
+		return fmt.Errorf("--pq hybrid recipients are not implemented yet (reserved for a later phase)")
+	}
+	recipients, err := resolveInitRecipients(c.Recipient)
+	if err != nil {
+		return err
+	}
+	return flow.RunInit(recipients, c.Remote, c.ChunkMin, c.ChunkAvg, c.ChunkMax, c.Force)
+}
+
+// resolveInitRecipients turns the --recipient value into a key list. An empty
+// value uses recipient.txt in getDefaultDir(). A value that looks like keys
+// (starts with age1, ssh-ed25519, ssh-rsa, or contains commas) is split on
+// commas; anything else is treated as a file path with one key per line,
+// skipping blanks and # comments. It returns file read errors and rejects
+// empty lists; key validity is checked by callers.
+func resolveInitRecipients(path string) ([]string, error) {
+	if path == "" {
+		path = filepath.Join(getDefaultDir(), "recipient.txt")
+	}
+	if looksLikeInlineKeys(path) {
+		var out []string
+		// SSH keys contain spaces; split only on commas.
+		for _, part := range strings.Split(path, ",") {
+			part = strings.TrimSpace(part)
+			if part != "" {
+				out = append(out, part)
+			}
+		}
+		if len(out) == 0 {
+			return nil, fmt.Errorf("no recipients found (run 'gloak keygen' first)")
+		}
+		return out, nil
+	}
+	return readRecipientFile(path)
+}
+
+// looksLikeInlineKeys reports whether s has a supported key prefix or a comma,
+// so recipient resolution treats it as inline keys rather than a file path.
+// It does not validate the keys.
+func looksLikeInlineKeys(s string) bool {
+	return strings.HasPrefix(s, "age1") ||
+		strings.HasPrefix(s, "ssh-ed25519 ") ||
+		strings.HasPrefix(s, "ssh-rsa ") ||
+		strings.Contains(s, ",")
+}
+
+// readRecipientFile returns trimmed, nonempty lines other than # comments.
+// It returns an error if the file cannot be read or contains no such lines;
+// the returned keys are not validated.
+func readRecipientFile(path string) ([]string, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read recipients from %s: %w (run 'gloak keygen' first)", path, err)
+	}
+	var out []string
+	for _, line := range strings.Split(string(data), "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		out = append(out, line)
+	}
+	if len(out) == 0 {
+		return nil, fmt.Errorf("no recipients found in %s (run 'gloak keygen' first)", path)
+	}
+	return out, nil
+}

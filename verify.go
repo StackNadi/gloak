@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"time"
 
 	"github.com/pterm/pterm"
 
@@ -14,6 +15,9 @@ type VerifyCmd struct {
 	Remote   string `help:"Source Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:"" short:"R"`
 }
 
+// Run verifies the backup using the selected or default identity and sends an
+// optional completion notification. Access, decryption, and integrity errors
+// are returned.
 func (v *VerifyCmd) Run() error {
 	pterm.Info.Println("Starting VERIFY process...")
 
@@ -23,5 +27,13 @@ func (v *VerifyCmd) Run() error {
 		pterm.Info.Printf("Using identity from: %s\n", ident)
 	}
 
-	return flow.RunVerify(v.UUID, ident, v.Remote)
+	start := time.Now()
+	if err := flow.RunVerify(v.UUID, ident, v.Remote); err != nil {
+		return err
+	}
+	notifyCommand("verify",
+		"Snapshot: "+v.UUID,
+		"Duration: "+formatDuration(time.Since(start)),
+	)
+	return nil
 }

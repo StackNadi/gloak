@@ -4,133 +4,329 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
 	"os"
+	"path"
 	"path/filepath"
+	"sort"
+	"strings"
+	"time"
 
 	"github.com/pterm/pterm"
 
 	"gloak/internal/core"
 	"gloak/internal/crypto"
+	"gloak/internal/repo"
 	"gloak/internal/storage"
 )
 
-func RunRestore(backupID string, identityPath string, remote string, outputDir string) error {
-	return runRestore(backupID, identityPath, storage.NewRcloneBackend(remote), outputDir)
-}
-
-func runRestore(backupID string, identityPath string, backend storage.Backend, outputDir string) error {
-	pterm.Info.Printf("Starting restore for UUID: %s\n", backupID)
-
-	pterm.Info.Println("Downloading encrypted manifest...")
-	var manifestBuf bytes.Buffer
-	err := backend.Download(fmt.Sprintf("%s/manifest.age", backupID), &manifestBuf)
+// RunRestore restores a standalone file backup or repository snapshot to
+// outputDir. For trees, pathFilter selects an exact relative path and its
+// descendants; empty selects all entries. File backups ignore the filter.
+// Access, decryption, integrity, and filesystem errors are returned; existing
+// files may be truncated and partial output remains on failure.
+func RunRestore(snapshotID, identityPath, remote, outputDir, pathFilter string) error {
+	backend := storage.NewRcloneBackend(remote)
+	outputPath, err := runRestore(snapshotID, outputDir, identityPath, backend, pathFilter)
 	if err != nil {
-		return fmt.Errorf("failed to download manifest.age: %w", err)
+		return err
 	}
-
-	pterm.Info.Println("Decrypting manifest...")
-	manifestReader, err := crypto.DecryptReader(identityPath, &manifestBuf)
-	if err != nil {
-		return fmt.Errorf("failed to decrypt manifest: %w", err)
-	}
-
-	manifestBytes, err := io.ReadAll(manifestReader)
-	if err != nil {
-		return fmt.Errorf("failed to read manifest contents: %w", err)
-	}
-
-	var manifest core.Manifest
-	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
-		return fmt.Errorf("failed to parse manifest JSON: %w", err)
-	}
-
-	pterm.Success.Printf("Manifest valid! Restoring file: %s (%d bytes)\n", manifest.OriginalName, manifest.OriginalSize)
-
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
-	}
-	if filepath.Base(manifest.OriginalName) != manifest.OriginalName {
-		return fmt.Errorf("invalid original filename in manifest: %s", manifest.OriginalName)
-	}
-	outputPath := filepath.Join(outputDir, manifest.OriginalName)
-	outFile, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
-	if err != nil {
-		return fmt.Errorf("failed to create output file: %w", err)
-	}
-	defer outFile.Close()
-
-	p, _ := pterm.DefaultProgressbar.
-		WithTotal(int(manifest.OriginalSize)).
-		WithTitle("Downloading & Decrypting...").
-		WithRemoveWhenDone(false).
-		Start()
-
-	payloadHasher := sha256.New()
-	for _, chunk := range manifest.Chunks {
-		var encryptedChunk bytes.Buffer
-		if err := backend.Download(fmt.Sprintf("%s/%s", backupID, chunk.Name), &encryptedChunk); err != nil {
-			p.Stop()
-			return fmt.Errorf("failed to download chunk %s: %w", chunk.Name, err)
-		}
-
-		encryptedBytes := encryptedChunk.Bytes()
-		if int64(len(encryptedBytes)) != chunk.EncryptedSize {
-			p.Stop()
-			return fmt.Errorf("chunk %s corrupted/tampered! Size mismatch", chunk.Name)
-		}
-		if hashBytes(encryptedBytes) != chunk.EncryptedSHA256 {
-			p.Stop()
-			return fmt.Errorf("chunk %s corrupted/tampered! Hash mismatch", chunk.Name)
-		}
-
-		decReader, err := crypto.DecryptReader(identityPath, bytes.NewReader(encryptedBytes))
-		if err != nil {
-			p.Stop()
-			return fmt.Errorf("failed to decrypt chunk %s: %w", chunk.Name, err)
-		}
-		plainBytes, err := io.ReadAll(decReader)
-		if err != nil {
-			p.Stop()
-			return fmt.Errorf("failed to read decrypted chunk %s: %w", chunk.Name, err)
-		}
-		if int64(len(plainBytes)) != chunk.PlainSize {
-			p.Stop()
-			return fmt.Errorf("chunk %s corrupted/tampered! Plain size mismatch", chunk.Name)
-		}
-		if hashBytes(plainBytes) != chunk.PlainSHA256 {
-			p.Stop()
-			return fmt.Errorf("chunk %s corrupted/tampered! Plain hash mismatch", chunk.Name)
-		}
-		if _, err := outFile.Write(plainBytes); err != nil {
-			p.Stop()
-			return fmt.Errorf("failed to write restored chunk %s: %w", chunk.Name, err)
-		}
-		payloadHasher.Write(plainBytes)
-		p.Add(len(plainBytes))
-	}
-
-	if hex.EncodeToString(payloadHasher.Sum(nil)) != manifest.PayloadSHA256 {
-		p.Stop()
-		return fmt.Errorf("fatal: overall payload hash does not match manifest")
-	}
-
-	p.Stop()
 	pterm.Success.Println("Restore completed successfully! File saved to:", outputPath)
 	return nil
 }
 
-type RestoreProgressReader struct {
-	io.Reader
-	pb *pterm.ProgressbarPrinter
+// runRestore restores a backup and returns the output file path or tree root.
+// A downloadable locator selects standalone file mode; any locator download
+// failure falls back to the repository flow. pathFilter applies only to trees.
+// Repository, manifest, and restore errors are returned without cleaning up output.
+func runRestore(snapshotID, outputDir, identityPath string, backend storage.Backend, pathFilter string) (string, error) {
+	if isFileMode(backend, snapshotID) {
+		return runFileRestore(snapshotID, identityPath, outputDir, backend)
+	}
+	r, err := repo.Open(backend, identityPath)
+	if err != nil {
+		return "", err
+	}
+	kind, fileM, treeM, err := readAnyManifest(backend, identityPath, snapshotID)
+	if err != nil {
+		return "", err
+	}
+	if kind == core.KindTree {
+		return runTreeRestore(treeM, r, outputDir, pathFilter, backend)
+	}
+	return runFileRestoreFromManifest(fileM, r, backend, outputDir)
 }
 
-func (pr *RestoreProgressReader) Read(p []byte) (int, error) {
-	n, err := pr.Reader.Read(p)
-	if n > 0 {
-		pr.pb.Add(n)
+// runFileRestoreFromManifest writes a repository file snapshot under outputDir
+// and returns its path, truncating any existing file. It checks chunk plaintext
+// sizes and hashes and the overall payload hash. Invalid names or chunk paths,
+// filesystem, download, decryption, integrity, and close errors can leave
+// partial output.
+func runFileRestoreFromManifest(manifest *core.Manifest, r *repo.Repo, backend storage.Backend, outputDir string) (string, error) {
+	if filepath.Base(manifest.OriginalName) != manifest.OriginalName {
+		return "", fmt.Errorf("invalid original filename in manifest: %s", manifest.OriginalName)
 	}
-	return n, err
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create output directory: %w", err)
+	}
+	outputPath := filepath.Join(outputDir, manifest.OriginalName)
+	outFile, err := os.OpenFile(outputPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
+	if err != nil {
+		return "", fmt.Errorf("failed to create output file: %w", err)
+	}
+	defer outFile.Close()
+
+	payloadHasher := sha256.New()
+	for _, meta := range manifest.Chunks {
+		if err := validateChunkPath(meta.Name); err != nil {
+			return "", err
+		}
+		var buf bytes.Buffer
+		if err := backend.Download(meta.Name, &buf); err != nil {
+			return "", fmt.Errorf("CHUNK CORRUPT %d (%s): missing object: %w", meta.Index, meta.Name, err)
+		}
+		plain, err := crypto.OpenChunk(r.MasterKey, meta.PlainSHA256, buf.Bytes())
+		if err != nil {
+			return "", fmt.Errorf("CHUNK CORRUPT %d (%s): %w", meta.Index, meta.Name, err)
+		}
+		if int64(len(plain)) != meta.PlainSize || hashBytes(plain) != meta.PlainSHA256 {
+			return "", fmt.Errorf("CHUNK CORRUPT %d (%s): plaintext mismatch", meta.Index, meta.Name)
+		}
+		if _, err := outFile.Write(plain); err != nil {
+			return "", fmt.Errorf("failed to write chunk %d: %w", meta.Index, err)
+		}
+		payloadHasher.Write(plain)
+	}
+
+	if hex.EncodeToString(payloadHasher.Sum(nil)) != manifest.PayloadSHA256 {
+		return "", fmt.Errorf("fatal: overall payload hash does not match manifest")
+	}
+	if err := outFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close output file: %w", err)
+	}
+	return outputPath, nil
+}
+
+// runTreeRestore restores entries below a root named for the first source
+// path, falling back to the snapshot UUID for an empty, . or root basename.
+// pathFilter is cleaned and validated as a relative path first, then selects
+// an exact slash-separated path and its descendants; empty selects all.
+// It returns the destination root even when nothing matches.
+// Missing source paths, unsafe entry paths, invalid filters, unknown selected
+// entry types, and filesystem or chunk restore errors are returned; partial
+// output remains.
+func runTreeRestore(m *core.TreeManifest, r *repo.Repo, outputDir, pathFilter string, backend storage.Backend) (string, error) {
+	pathFilter, err := normalizePathFilter(pathFilter)
+	if err != nil {
+		return "", err
+	}
+	if len(m.Paths) == 0 {
+		return "", fmt.Errorf("tree snapshot has no source paths")
+	}
+	// The manifest is remote input: fall back to the snapshot UUID when
+	// the recorded root name is not a single safe path segment, and
+	// reject the manifest when even the UUID is unsafe.
+	rootName := filepath.Base(filepath.Clean(m.Paths[0]))
+	if err := core.ValidateRelPath(rootName); err != nil {
+		rootName = m.UUID
+	}
+	if err := core.ValidateRelPath(rootName); err != nil {
+		return "", fmt.Errorf("unsafe restore root name: %w", err)
+	}
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create output directory: %w", err)
+	}
+	destRoot := filepath.Join(outputDir, rootName)
+	// Defense in depth: the join above must stay under outputDir.
+	if rel, err := filepath.Rel(outputDir, destRoot); err != nil ||
+		rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("restore root escapes output directory: %s", rootName)
+	}
+
+	type dirSetting struct {
+		path  string
+		mode  os.FileMode
+		mtime time.Time
+	}
+	var dirSettings []dirSetting
+	var matched int
+
+	for _, entry := range m.Entries {
+		if err := core.ValidateRelPath(entry.RelPath); err != nil {
+			return "", fmt.Errorf("unsafe path in manifest: %w", err)
+		}
+		if pathFilter != "" {
+			if entry.RelPath != pathFilter && !strings.HasPrefix(entry.RelPath, pathFilter+"/") {
+				continue
+			}
+		}
+		matched++
+		target := filepath.Join(destRoot, filepath.FromSlash(entry.RelPath))
+		// Defense in depth: ensure target stays under destRoot.
+		if !strings.HasPrefix(target, destRoot+string(filepath.Separator)) && target != destRoot {
+			return "", fmt.Errorf("restored path escapes output root: %s", entry.RelPath)
+		}
+		// The manifest is remote input: reject targets reached through a
+		// symlink below the destination root before creating or writing.
+		if err := rejectSymlinkRestorePath(destRoot, target); err != nil {
+			return "", err
+		}
+		switch entry.Type {
+		case "dir":
+			// Keep the directory writable while children are restored;
+			// the recorded mode is applied after the loop.
+			if err := os.MkdirAll(target, 0700); err != nil {
+				return "", fmt.Errorf("failed to create directory %s: %w", entry.RelPath, err)
+			}
+			if err := os.Chmod(target, 0700); err != nil {
+				return "", fmt.Errorf("failed to open directory %s for restore: %w", entry.RelPath, err)
+			}
+			setting := dirSetting{path: target, mode: os.FileMode(entry.Mode) & 0777}
+			if mt, err := time.Parse(time.RFC3339, entry.Mtime); err == nil {
+				setting.mtime = mt
+			}
+			dirSettings = append(dirSettings, setting)
+		case "file":
+			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
+				return "", fmt.Errorf("failed to create parent for %s: %w", entry.RelPath, err)
+			}
+			if err := restoreTreeFile(entry, r, backend, target); err != nil {
+				return "", err
+			}
+		default:
+			return "", fmt.Errorf("unknown tree entry type %q for %s", entry.Type, entry.RelPath)
+		}
+	}
+	if pathFilter != "" && matched == 0 {
+		return "", fmt.Errorf("path filter %q matches nothing in snapshot %s", pathFilter, m.UUID)
+	}
+
+	// Apply directory modes after every child is written, deepest paths
+	// first so a read-only parent never blocks chmod on its children.
+	sort.Slice(dirSettings, func(i, j int) bool {
+		return len(dirSettings[i].path) > len(dirSettings[j].path)
+	})
+	for _, d := range dirSettings {
+		if err := os.Chmod(d.path, d.mode); err != nil {
+			return "", fmt.Errorf("failed to set mode on %s: %w", d.path, err)
+		}
+		if !d.mtime.IsZero() {
+			_ = os.Chtimes(d.path, d.mtime, d.mtime)
+		}
+	}
+	return destRoot, nil
+}
+
+// normalizePathFilter cleans a user-supplied tree restore filter and validates
+// it as a relative path. Empty input stays empty and "." selects everything.
+// Filters that are unsafe after cleaning are rejected.
+func normalizePathFilter(pathFilter string) (string, error) {
+	if pathFilter == "" {
+		return "", nil
+	}
+	cleaned := path.Clean(filepath.ToSlash(pathFilter))
+	if cleaned == "." {
+		return "", nil
+	}
+	if err := core.ValidateRelPath(cleaned); err != nil {
+		return "", fmt.Errorf("invalid path filter: %w", err)
+	}
+	return cleaned, nil
+}
+
+// rejectSymlinkRestorePath returns an error when destRoot or any component of
+// target below it already exists as a symlink. A string check on the joined
+// path cannot see links planted under the destination, so every component is
+// inspected before restore creates or writes through it. Components that do
+// not exist yet are left for creation.
+func rejectSymlinkRestorePath(destRoot, target string) error {
+	inspect := func(p string) error {
+		fi, err := os.Lstat(p)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return fmt.Errorf("failed to inspect restore path %s: %w", p, err)
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing to restore through symlink: %s", p)
+		}
+		return nil
+	}
+	if err := inspect(destRoot); err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(destRoot, target)
+	if err != nil {
+		return fmt.Errorf("invalid restore path: %w", err)
+	}
+	cur := destRoot
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if part == "." || part == "" {
+			continue
+		}
+		cur = filepath.Join(cur, part)
+		if err := inspect(cur); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// restoreTreeFile creates or truncates target, writes verified plaintext chunks,
+// and attempts to restore its modification time. An existing symlink at the
+// target is rejected. New files use entry.Mode's permission bits, subject to
+// the umask. Path, download, decryption, checksum, file open/write, and close
+// errors are returned and can leave a partial file. Invalid timestamps and
+// timestamp update failures are ignored.
+func restoreTreeFile(entry core.TreeEntry, r *repo.Repo, backend storage.Backend, target string) error {
+	mode := os.FileMode(entry.Mode) & 0777
+	if fi, err := os.Lstat(target); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to restore %s over a symlink", entry.RelPath)
+	}
+	outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+	if err != nil {
+		// An earlier restore may have left the file read-only; make it
+		// writable once and retry.
+		if chmodErr := os.Chmod(target, mode|0200); chmodErr != nil {
+			return fmt.Errorf("failed to create output file %s: %w", entry.RelPath, err)
+		}
+		outFile, err = os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
+		if err != nil {
+			return fmt.Errorf("failed to create output file %s: %w", entry.RelPath, err)
+		}
+	}
+	defer outFile.Close()
+
+	for _, meta := range entry.Chunks {
+		if err := validateChunkPath(meta.Name); err != nil {
+			return err
+		}
+		var buf bytes.Buffer
+		if err := backend.Download(meta.Name, &buf); err != nil {
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): missing object: %w", meta.Index, meta.Name, err)
+		}
+		plain, err := crypto.OpenChunk(r.MasterKey, meta.PlainSHA256, buf.Bytes())
+		if err != nil {
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): %w", meta.Index, meta.Name, err)
+		}
+		if int64(len(plain)) != meta.PlainSize || hashBytes(plain) != meta.PlainSHA256 {
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): plaintext mismatch", meta.Index, meta.Name)
+		}
+		if _, err := outFile.Write(plain); err != nil {
+			return fmt.Errorf("failed to write chunk %d: %w", meta.Index, err)
+		}
+	}
+	if err := outFile.Close(); err != nil {
+		return fmt.Errorf("failed to close output file %s: %w", entry.RelPath, err)
+	}
+	// Re-applying the mode matters when the file already existed (a
+	// previous restore may have left it read-only or writable).
+	if err := os.Chmod(target, mode); err != nil {
+		return fmt.Errorf("failed to set mode on %s: %w", entry.RelPath, err)
+	}
+	if mt, err := time.Parse(time.RFC3339, entry.Mtime); err == nil {
+		_ = os.Chtimes(target, mt, mt)
+	}
+	return nil
 }

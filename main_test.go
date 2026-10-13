@@ -48,15 +48,24 @@ func TestCommandOptionShortTags(t *testing.T) {
 	}{
 		{name: "keygen output dir", cmd: KeygenCmd{}, fieldName: "OutputDir", wantShort: "o"},
 		{name: "keygen force", cmd: KeygenCmd{}, fieldName: "Force", wantShort: "f"},
+		{name: "init remote", cmd: InitCmd{}, fieldName: "Remote", wantShort: "R"},
+		{name: "init recipient", cmd: InitCmd{}, fieldName: "Recipient", wantShort: "r"},
+		{name: "init force", cmd: InitCmd{}, fieldName: "Force", wantShort: "f"},
 		{name: "upload recipient", cmd: UploadCmd{}, fieldName: "Recipient", wantShort: "r"},
 		{name: "upload remote", cmd: UploadCmd{}, fieldName: "Remote", wantShort: "R"},
+		{name: "backup identity", cmd: BackupCmd{}, fieldName: "Identity", wantShort: "i"},
+		{name: "backup remote", cmd: BackupCmd{}, fieldName: "Remote", wantShort: "R"},
 		{name: "restore identity", cmd: RestoreCmd{}, fieldName: "Identity", wantShort: "i"},
 		{name: "restore remote", cmd: RestoreCmd{}, fieldName: "Remote", wantShort: "R"},
 		{name: "restore output dir", cmd: RestoreCmd{}, fieldName: "OutputDir", wantShort: "o"},
 		{name: "verify identity", cmd: VerifyCmd{}, fieldName: "Identity", wantShort: "i"},
 		{name: "verify remote", cmd: VerifyCmd{}, fieldName: "Remote", wantShort: "R"},
-		{name: "cleanup remote", cmd: CleanupCmd{}, fieldName: "Remote", wantShort: "R"},
-		{name: "cleanup yes", cmd: CleanupCmd{}, fieldName: "Yes", wantShort: "y"},
+		{name: "snapshots identity", cmd: SnapshotsCmd{}, fieldName: "Identity", wantShort: "i"},
+		{name: "snapshots remote", cmd: SnapshotsCmd{}, fieldName: "Remote", wantShort: "R"},
+		{name: "prune identity", cmd: PruneCmd{}, fieldName: "Identity", wantShort: "i"},
+		{name: "prune remote", cmd: PruneCmd{}, fieldName: "Remote", wantShort: "R"},
+		{name: "check identity", cmd: CheckCmd{}, fieldName: "Identity", wantShort: "i"},
+		{name: "check remote", cmd: CheckCmd{}, fieldName: "Remote", wantShort: "R"},
 		{name: "setup dir", cmd: SetupCmd{}, fieldName: "Dir", wantShort: "D"},
 		{name: "setup update", cmd: SetupCmd{}, fieldName: "Update", wantShort: "u"},
 	}
@@ -71,5 +80,124 @@ func TestCommandOptionShortTags(t *testing.T) {
 				t.Fatalf("short tag = %q, want %q", got, tt.wantShort)
 			}
 		})
+	}
+}
+
+func TestUploadCmdFileIsExistingFileArg(t *testing.T) {
+	field, ok := reflect.TypeOf(UploadCmd{}).FieldByName("File")
+	if !ok {
+		t.Fatal("UploadCmd.File missing")
+	}
+	if field.Tag.Get("type") != "existingfile" {
+		t.Fatalf("type tag = %q, want existingfile", field.Tag.Get("type"))
+	}
+	if _, ok := field.Tag.Lookup("arg"); !ok {
+		t.Fatal("File should be a positional arg")
+	}
+}
+
+func TestBackupCmdPathArgTag(t *testing.T) {
+	field, ok := reflect.TypeOf(BackupCmd{}).FieldByName("ExistingFile")
+	if !ok {
+		t.Fatal("field missing")
+	}
+	if _, ok := field.Tag.Lookup("arg"); !ok {
+		t.Fatal("path should be a positional arg")
+	}
+	if got := field.Tag.Get("name"); got != "path" {
+		t.Fatalf("name tag = %q", got)
+	}
+	if strings.Contains(field.Tag.Get("type"), "existingfile") {
+		t.Fatal("existingfile type still set; directories must parse")
+	}
+}
+
+func TestResolveInitRecipientsReadsFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "recipient.txt")
+	content := "# comment\n\nage1aaa\nage1bbb\n"
+	if err := os.WriteFile(path, []byte(content), 0644); err != nil {
+		t.Fatalf("failed to write recipient file: %v", err)
+	}
+
+	got, err := resolveInitRecipients(path)
+	if err != nil {
+		t.Fatalf("resolveInitRecipients() error: %v", err)
+	}
+	want := []string{"age1aaa", "age1bbb"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("resolveInitRecipients() = %v, want %v", got, want)
+	}
+}
+
+func TestResolveInitRecipientsParsesInlineKeys(t *testing.T) {
+	got, err := resolveInitRecipients("age1aaa, age1bbb")
+	if err != nil {
+		t.Fatalf("resolveInitRecipients() error: %v", err)
+	}
+	want := []string{"age1aaa", "age1bbb"}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("resolveInitRecipients() = %v, want %v", got, want)
+	}
+}
+
+func TestResolveInitRecipientsEmptyFileErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "recipient.txt")
+	if err := os.WriteFile(path, []byte("# only a comment\n\n"), 0644); err != nil {
+		t.Fatalf("failed to write recipient file: %v", err)
+	}
+
+	_, err := resolveInitRecipients(path)
+	if err == nil {
+		t.Fatal("resolveInitRecipients() succeeded with empty file")
+	}
+	if !strings.Contains(err.Error(), "no recipients") {
+		t.Fatalf("resolveInitRecipients() error = %q, want no recipients mention", err)
+	}
+}
+
+func TestResolveInitRecipientsMissingFileErrors(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.txt")
+
+	_, err := resolveInitRecipients(path)
+	if err == nil {
+		t.Fatal("resolveInitRecipients() succeeded with missing file")
+	}
+	if !strings.Contains(err.Error(), "gloak keygen") {
+		t.Fatalf("resolveInitRecipients() error = %q, want gloak keygen mention", err)
+	}
+}
+
+func TestGetDefaultDirUsesGLOAK_DIR(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "custom-gloak")
+	t.Setenv("GLOAK_DIR", dir)
+
+	if got := getDefaultDir(); got != dir {
+		t.Fatalf("getDefaultDir() = %q, want %q", got, dir)
+	}
+}
+
+func TestGetDefaultDirExpandsTildeInGLOAK_DIR(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("no home dir: %v", err)
+	}
+	t.Setenv("GLOAK_DIR", "~/custom-gloak")
+
+	want := filepath.Join(home, "custom-gloak")
+	if got := getDefaultDir(); got != want {
+		t.Fatalf("getDefaultDir() = %q, want %q", got, want)
+	}
+}
+
+func TestGetDefaultDirFallsBackToHomeWhenUnset(t *testing.T) {
+	t.Setenv("GLOAK_DIR", "")
+
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skipf("no home dir: %v", err)
+	}
+	want := filepath.Join(home, ".gloak")
+	if got := getDefaultDir(); got != want {
+		t.Fatalf("getDefaultDir() = %q, want %q", got, want)
 	}
 }

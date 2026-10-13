@@ -4,103 +4,127 @@ import (
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
-	"io"
 
 	"github.com/pterm/pterm"
 
 	"gloak/internal/core"
 	"gloak/internal/crypto"
+	"gloak/internal/repo"
 	"gloak/internal/storage"
 )
 
-func RunVerify(backupID string, identityPath string, remote string) error {
-	return runVerify(backupID, identityPath, storage.NewRcloneBackend(remote))
+// RunVerify verifies a standalone file backup or repository snapshot without
+// writing restored files. Access, decryption, and integrity errors are returned.
+func RunVerify(snapshotID, identityPath, remote string) error {
+	backend := storage.NewRcloneBackend(remote)
+	spinner, _ := pterm.DefaultSpinner.Start("Verifying backup...")
+	err := runVerify(snapshotID, identityPath, backend)
+	if err != nil {
+		_ = spinner.Stop()
+		return err
+	}
+	spinner.Success("Backup verified successfully")
+	return nil
 }
 
-func runVerify(backupID string, identityPath string, backend storage.Backend) error {
-	pterm.Info.Printf("Starting verification for UUID: %s\n", backupID)
-
-	var manifestBuf bytes.Buffer
-	err := backend.Download(fmt.Sprintf("%s/manifest.age", backupID), &manifestBuf)
+// runVerify selects standalone verification when a locator can be downloaded,
+// otherwise it opens the repository and verifies the snapshot's file or tree
+// contents. It returns repository, manifest, and verification errors.
+func runVerify(snapshotID, identityPath string, backend storage.Backend) error {
+	if isFileMode(backend, snapshotID) {
+		return runFileVerify(snapshotID, identityPath, backend)
+	}
+	r, err := repo.Open(backend, identityPath)
 	if err != nil {
-		return fmt.Errorf("failed to download manifest.age: %w", err)
+		return err
 	}
-
-	pterm.Info.Println("Decrypting manifest...")
-	manifestReader, err := crypto.DecryptReader(identityPath, &manifestBuf)
+	kind, fileM, treeM, err := readAnyManifest(backend, identityPath, snapshotID)
 	if err != nil {
-		return fmt.Errorf("failed to decrypt manifest (invalid key or corrupted file): %w", err)
+		return err
 	}
-
-	manifestBytes, err := io.ReadAll(manifestReader)
-	if err != nil {
-		return fmt.Errorf("failed to read manifest contents: %w", err)
+	if kind == core.KindTree {
+		return runTreeVerify(treeM, r, backend)
 	}
+	return runFileVerifyFromManifest(fileM, r, backend)
+}
 
-	var manifest core.Manifest
-	if err := json.Unmarshal(manifestBytes, &manifest); err != nil {
-		return fmt.Errorf("failed to parse manifest JSON: %w", err)
-	}
-
-	pterm.Success.Printf("Manifest valid! Verifying %d chunk...\n", len(manifest.Chunks))
-
-	p, _ := pterm.DefaultProgressbar.
-		WithTotal(len(manifest.Chunks)).
-		WithTitle("Verifying Chunks...").
-		WithRemoveWhenDone(false).
-		Start()
-
+// runFileVerifyFromManifest verifies encrypted and plaintext chunk sizes and
+// hashes, authentication, and the overall payload hash without restoring files.
+// It returns chunk path, download, decryption, and integrity errors.
+func runFileVerifyFromManifest(manifest *core.Manifest, r *repo.Repo, backend storage.Backend) error {
 	payloadHasher := sha256.New()
-
-	for _, chunk := range manifest.Chunks {
-		var encryptedChunk bytes.Buffer
-		err := backend.Download(fmt.Sprintf("%s/%s", backupID, chunk.Name), &encryptedChunk)
+	for _, meta := range manifest.Chunks {
+		if err := validateChunkPath(meta.Name); err != nil {
+			return err
+		}
+		var buf bytes.Buffer
+		if err := backend.Download(meta.Name, &buf); err != nil {
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): missing object: %w", meta.Index, meta.Name, err)
+		}
+		sealed := buf.Bytes()
+		if int64(len(sealed)) != meta.EncryptedSize {
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): encrypted size mismatch", meta.Index, meta.Name)
+		}
+		if hashBytes(sealed) != meta.EncryptedSHA256 {
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): encrypted sha256 mismatch", meta.Index, meta.Name)
+		}
+		plain, err := crypto.OpenChunk(r.MasterKey, meta.PlainSHA256, sealed)
 		if err != nil {
-			p.Stop()
-			return fmt.Errorf("failed to download chunk %s: %w", chunk.Name, err)
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): %w", meta.Index, meta.Name, err)
 		}
-
-		encryptedBytes := encryptedChunk.Bytes()
-		if int64(len(encryptedBytes)) != chunk.EncryptedSize {
-			p.Stop()
-			return fmt.Errorf("CHUNK CORRUPT: Size %s mismatch!", chunk.Name)
+		if int64(len(plain)) != meta.PlainSize || hashBytes(plain) != meta.PlainSHA256 {
+			return fmt.Errorf("CHUNK CORRUPT %d (%s): plaintext mismatch", meta.Index, meta.Name)
 		}
-		if hashBytes(encryptedBytes) != chunk.EncryptedSHA256 {
-			p.Stop()
-			return fmt.Errorf("CHUNK CORRUPT: Hash %s mismatch!", chunk.Name)
-		}
-
-		plainReader, err := crypto.DecryptReader(identityPath, bytes.NewReader(encryptedBytes))
-		if err != nil {
-			p.Stop()
-			return fmt.Errorf("failed to decrypt chunk %s: %w", chunk.Name, err)
-		}
-		plainBytes, err := io.ReadAll(plainReader)
-		if err != nil {
-			p.Stop()
-			return fmt.Errorf("failed to read decrypted chunk %s: %w", chunk.Name, err)
-		}
-		if int64(len(plainBytes)) != chunk.PlainSize {
-			p.Stop()
-			return fmt.Errorf("CHUNK CORRUPT: Plain size %s mismatch!", chunk.Name)
-		}
-		if hashBytes(plainBytes) != chunk.PlainSHA256 {
-			p.Stop()
-			return fmt.Errorf("CHUNK CORRUPT: Plain hash %s mismatch!", chunk.Name)
-		}
-		payloadHasher.Write(plainBytes)
-
-		p.Add(1)
+		payloadHasher.Write(plain)
 	}
-
-	p.Stop()
 
 	if hex.EncodeToString(payloadHasher.Sum(nil)) != manifest.PayloadSHA256 {
-		return fmt.Errorf("FATAL: Overall payload hash differs from manifest! Data has been modified")
+		return fmt.Errorf("FATAL: overall payload hash differs from manifest")
 	}
+	return nil
+}
 
-	pterm.Success.Println("VERIFIED! All chunks are healthy and checksums match 100%.")
+// runTreeVerify verifies paths and encrypted and plaintext chunk sizes and
+// hashes for file entries. Directory entries only have their paths checked.
+// Unknown entry types and unsafe paths are rejected the same way restore
+// rejects them. It returns path, download, decryption, and integrity errors
+// without writing restored files.
+func runTreeVerify(m *core.TreeManifest, r *repo.Repo, backend storage.Backend) error {
+	for _, entry := range m.Entries {
+		if err := core.ValidateRelPath(entry.RelPath); err != nil {
+			return err
+		}
+		switch entry.Type {
+		case "file":
+			for _, meta := range entry.Chunks {
+				if err := validateChunkPath(meta.Name); err != nil {
+					return err
+				}
+				var buf bytes.Buffer
+				if err := backend.Download(meta.Name, &buf); err != nil {
+					return fmt.Errorf("CHUNK CORRUPT %d (%s): missing object: %w", meta.Index, meta.Name, err)
+				}
+				sealed := buf.Bytes()
+				if int64(len(sealed)) != meta.EncryptedSize {
+					return fmt.Errorf("CHUNK CORRUPT %d (%s): encrypted size mismatch", meta.Index, meta.Name)
+				}
+				if hashBytes(sealed) != meta.EncryptedSHA256 {
+					return fmt.Errorf("CHUNK CORRUPT %d (%s): encrypted sha256 mismatch", meta.Index, meta.Name)
+				}
+				plain, err := crypto.OpenChunk(r.MasterKey, meta.PlainSHA256, sealed)
+				if err != nil {
+					return fmt.Errorf("CHUNK CORRUPT %d (%s): %w", meta.Index, meta.Name, err)
+				}
+				if int64(len(plain)) != meta.PlainSize || hashBytes(plain) != meta.PlainSHA256 {
+					return fmt.Errorf("CHUNK CORRUPT %d (%s): plaintext mismatch", meta.Index, meta.Name)
+				}
+			}
+		case "dir":
+			// Directories carry no chunks to verify.
+		default:
+			return fmt.Errorf("unknown tree entry type %q for %s", entry.Type, entry.RelPath)
+		}
+	}
 	return nil
 }

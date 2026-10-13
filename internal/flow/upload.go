@@ -2,12 +2,16 @@ package flow
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
+	"time"
 
 	"github.com/pterm/pterm"
 
@@ -16,105 +20,67 @@ import (
 	"gloak/internal/storage"
 )
 
-func RunUpload(filePath string, recipientKey string, remote string) error {
-	return runUploadWithStateAndChunkSize(filePath, recipientKey, storage.NewRcloneBackend(remote), core.GenerateUUID(), remote, defaultUploadStateDir(), core.ChunkSize)
+const fileFormatVersion = "file-2"
+
+const masterKeySize = 32
+
+var fileChunkNameRe = regexp.MustCompile(`^chunk_\d{5,}$`)
+
+type fileManifest struct {
+	Version       string           `json:"version"`
+	UUID          string           `json:"uuid"`
+	OriginalName  string           `json:"original_name"`
+	OriginalSize  int64            `json:"original_size"`
+	CreatedAt     string           `json:"created_at"`
+	PayloadSHA256 string           `json:"payload_sha256"`
+	MasterKey     string           `json:"master_key"`
+	Chunks        []core.ChunkMeta `json:"chunks"`
 }
 
-func runUpload(filePath string, recipientKey string, backend storage.Backend, backupID string) error {
-	return runUploadWithState(filePath, recipientKey, backend, backupID, "", "")
+type fileLocator struct {
+	Version string `json:"version"`
+	UUID    string `json:"uuid"`
 }
 
-func runUploadWithState(filePath string, recipientKey string, backend storage.Backend, backupID string, remote string, stateDir string) error {
-	return runUploadWithStateAndChunkSize(filePath, recipientKey, backend, backupID, remote, stateDir, core.ChunkSize)
+// fileChunkName formats an index as chunk_ followed by a decimal number padded
+// to at least five digits.
+func fileChunkName(index int) string {
+	return fmt.Sprintf("chunk_%05d", index)
 }
 
-func runUploadWithStateAndChunkSize(filePath string, recipientKey string, backend storage.Backend, backupID string, remote string, stateDir string, chunkSize int64) error {
-	file, err := os.Open(filePath)
-	if err != nil {
-		return fmt.Errorf("failed to open source file: %w", err)
+// validateFileChunkName accepts only chunk_ names with at least five digits.
+func validateFileChunkName(name string) error {
+	if !fileChunkNameRe.MatchString(name) {
+		return fmt.Errorf("invalid chunk name: %s", name)
 	}
-	defer file.Close()
-
-	stat, err := file.Stat()
-	if err != nil {
-		return fmt.Errorf("failed to stat file: %w", err)
-	}
-	originalSize := stat.Size()
-	originalName := filepath.Base(filePath)
-	state := UploadState{}
-	if stateDir != "" {
-		absPath, err := filepath.Abs(filePath)
-		if err != nil {
-			return fmt.Errorf("failed to resolve source path: %w", err)
-		}
-		state = newUploadStateWithChunkSize(backupID, absPath, originalName, originalSize, remote, recipientKey, chunkSize)
-		if err := saveUploadState(stateDir, state); err != nil {
-			return err
-		}
-	}
-
-	pterm.Success.Printf("Backup ID: %s\n", backupID)
-
-	p, _ := pterm.DefaultProgressbar.
-		WithTotal(int(originalSize)).
-		WithTitle("Encrypting & Uploading...").
-		WithRemoveWhenDone(false).
-		Start()
-
-	chunksMeta, payloadHash, err := uploadPlaintextChunks(file, recipientKey, backend, backupID, &state, stateDir, chunkSize, nil, func(n int) {
-		p.Add(n)
-	})
-
-	if err != nil {
-		p.Stop()
-		return fmt.Errorf("chunking/upload process failed: %w", err)
-	}
-
-	p.Stop()
-
-	pterm.Info.Println("Building and encrypting manifest...")
-	manifest := core.CreateManifest(backupID, originalName, originalSize, recipientKey, payloadHash, chunksMeta)
-
-	encryptedManifestBytes, err := core.EncryptManifest(recipientKey, manifest)
-	if err != nil {
-		return fmt.Errorf("failed to encrypt manifest: %w", err)
-	}
-
-	err = backend.Upload(fmt.Sprintf("%s/manifest.age", backupID), bytes.NewReader(encryptedManifestBytes))
-	if err != nil {
-		return fmt.Errorf("failed to upload manifest.age: %w", err)
-	}
-
-	locator := core.CreateLocator(backupID)
-	locatorBytes, _ := core.SerializeLocator(locator)
-	err = backend.Upload(fmt.Sprintf("%s/locator.json", backupID), bytes.NewReader(locatorBytes))
-	if err != nil {
-		return fmt.Errorf("failed to upload locator.json: %w", err)
-	}
-	if stateDir != "" {
-		if err := deleteUploadState(stateDir, backupID); err != nil {
-			return fmt.Errorf("backup completed but failed to delete upload state: %w", err)
-		}
-	}
-
-	pterm.Success.Println("Backup completed successfully!")
-	pterm.DefaultBasicText.Printf("Save this UUID for restoration: %s\n", backupID)
 	return nil
 }
 
-func uploadPlaintextChunks(file *os.File, recipientKey string, backend storage.Backend, backupID string, state *UploadState, stateDir string, chunkSize int64, onSkip func(core.ChunkMeta), onProgress func(int)) ([]core.ChunkMeta, string, error) {
-	if chunkSize <= 0 {
-		return nil, "", fmt.Errorf("chunk size must be positive")
+// RunUpload seals filePath into a self-contained {uuid}/ folder on backend and
+// returns that UUID. Chunks contain up to core.ChunkSize bytes. It writes the
+// locator last as a completion marker. Empty recipients, file read, encryption,
+// and upload errors are returned; uploaded objects remain after a failure.
+func RunUpload(filePath string, recipients []string, backend storage.Backend) (string, error) {
+	if len(recipients) == 0 {
+		return "", fmt.Errorf("at least one recipient is required")
+	}
+	file, err := os.Open(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to open source file: %w", err)
+	}
+	defer file.Close()
+
+	backupID := core.GenerateUUID()
+	masterKey := make([]byte, masterKeySize)
+	if _, err := rand.Read(masterKey); err != nil {
+		return "", fmt.Errorf("failed to generate master key: %w", err)
 	}
 
-	existingChunks := make(map[int]core.ChunkMeta, len(state.UploadedChunks))
-	for _, chunk := range state.UploadedChunks {
-		existingChunks[chunk.Index] = chunk
-	}
-
+	spinner, _ := pterm.DefaultSpinner.Start("Encrypting and uploading...")
 	payloadHasher := sha256.New()
-	chunksMeta := make([]core.ChunkMeta, 0, len(state.UploadedChunks))
-	buffer := make([]byte, int(chunkSize))
+	buffer := make([]byte, int(core.ChunkSize))
+	var metas []core.ChunkMeta
+	var total int64
 
 	for index := 0; ; index++ {
 		n, readErr := io.ReadFull(file, buffer)
@@ -122,93 +88,80 @@ func uploadPlaintextChunks(file *os.File, recipientKey string, backend storage.B
 			break
 		}
 		if readErr != nil && readErr != io.ErrUnexpectedEOF {
-			return nil, "", fmt.Errorf("failed to read source chunk %d: %w", index, readErr)
+			_ = spinner.Stop()
+			return "", fmt.Errorf("failed to read chunk %d: %w", index, readErr)
+		}
+		if n == 0 {
+			break
 		}
 
-		plainChunk := append([]byte(nil), buffer[:n]...)
-		payloadHasher.Write(plainChunk)
-		plainHash := hashBytes(plainChunk)
-		chunkName := fmt.Sprintf("chunk_%05d", index)
-
-		if existing, ok := existingChunks[index]; ok {
-			if existing.Name != chunkName {
-				return nil, "", fmt.Errorf("upload state chunk %d name mismatch: got %s, want %s", index, existing.Name, chunkName)
-			}
-			if existing.PlainSize != int64(n) || existing.PlainSHA256 != plainHash {
-				return nil, "", fmt.Errorf("upload state chunk %d does not match source file", index)
-			}
-			chunksMeta = append(chunksMeta, existing)
-			if onSkip != nil {
-				onSkip(existing)
-			}
-		} else {
-			encryptedChunk, err := encryptChunk(recipientKey, plainChunk)
-			if err != nil {
-				return nil, "", fmt.Errorf("failed to encrypt chunk %d: %w", index, err)
-			}
-
-			chunk := core.ChunkMeta{
-				Index:           index,
-				Name:            chunkName,
-				PlainSize:       int64(n),
-				PlainSHA256:     plainHash,
-				EncryptedSize:   int64(len(encryptedChunk)),
-				EncryptedSHA256: hashBytes(encryptedChunk),
-			}
-
-			if err := backend.Upload(fmt.Sprintf("%s/%s", backupID, chunkName), bytes.NewReader(encryptedChunk)); err != nil {
-				return nil, "", fmt.Errorf("chunk %d failed to process: %w", index, err)
-			}
-			chunksMeta = append(chunksMeta, chunk)
-			if stateDir != "" {
-				state.UploadedChunks = append(state.UploadedChunks, chunk)
-				if err := saveUploadState(stateDir, *state); err != nil {
-					return nil, "", fmt.Errorf("chunk %d callback failed: %w", index, err)
-				}
-			}
+		plain := buffer[:n]
+		payloadHasher.Write(plain)
+		plainHash := hashBytes(plain)
+		sealed, err := crypto.SealChunk(masterKey, plainHash, plain)
+		if err != nil {
+			_ = spinner.Stop()
+			return "", fmt.Errorf("failed to seal chunk %d: %w", index, err)
 		}
-
-		if onProgress != nil {
-			onProgress(n)
+		encSum := sha256.Sum256(sealed)
+		name := fileChunkName(index)
+		remotePath := backupID + "/" + name
+		if err := backend.Upload(remotePath, bytes.NewReader(sealed)); err != nil {
+			_ = spinner.Stop()
+			return "", fmt.Errorf("failed to upload chunk %d: %w", index, err)
 		}
+		metas = append(metas, core.ChunkMeta{
+			Index:           index,
+			Name:            name,
+			PlainSize:       int64(n),
+			PlainSHA256:     plainHash,
+			EncryptedSize:   int64(len(sealed)),
+			EncryptedSHA256: hex.EncodeToString(encSum[:]),
+		})
+		total += int64(n)
+		spinner.UpdateText(fmt.Sprintf("Uploaded %d chunks", len(metas)))
+
 		if readErr == io.ErrUnexpectedEOF {
 			break
 		}
 	}
 
-	return chunksMeta, hex.EncodeToString(payloadHasher.Sum(nil)), nil
-}
-
-func encryptChunk(recipientKey string, plainChunk []byte) ([]byte, error) {
-	var encrypted bytes.Buffer
-	encWriter, err := crypto.EncryptWriter(recipientKey, &encrypted)
+	manifest := fileManifest{
+		Version:       fileFormatVersion,
+		UUID:          backupID,
+		OriginalName:  filepath.Base(filePath),
+		OriginalSize:  total,
+		CreatedAt:     time.Now().UTC().Format(time.RFC3339),
+		PayloadSHA256: hex.EncodeToString(payloadHasher.Sum(nil)),
+		MasterKey:     hex.EncodeToString(masterKey),
+		Chunks:        metas,
+	}
+	manifestJSON, err := json.Marshal(manifest)
 	if err != nil {
-		return nil, err
+		_ = spinner.Stop()
+		return "", fmt.Errorf("failed to marshal manifest: %w", err)
 	}
-	if _, err := encWriter.Write(plainChunk); err != nil {
-		_ = encWriter.Close()
-		return nil, err
+	sealedManifest, err := crypto.EncryptMulti(recipients, manifestJSON)
+	if err != nil {
+		_ = spinner.Stop()
+		return "", fmt.Errorf("failed to encrypt manifest: %w", err)
 	}
-	if err := encWriter.Close(); err != nil {
-		return nil, err
+	if err := backend.Upload(backupID+"/manifest.age", bytes.NewReader(sealedManifest)); err != nil {
+		_ = spinner.Stop()
+		return "", fmt.Errorf("failed to upload manifest: %w", err)
 	}
-	return encrypted.Bytes(), nil
-}
 
-func hashBytes(data []byte) string {
-	hash := sha256.Sum256(data)
-	return hex.EncodeToString(hash[:])
-}
-
-type ProgressReader struct {
-	io.Reader
-	pb *pterm.ProgressbarPrinter
-}
-
-func (pr *ProgressReader) Read(p []byte) (int, error) {
-	n, err := pr.Reader.Read(p)
-	if n > 0 {
-		pr.pb.Add(n)
+	locator := fileLocator{Version: fileFormatVersion, UUID: backupID}
+	locatorJSON, err := json.Marshal(locator)
+	if err != nil {
+		_ = spinner.Stop()
+		return "", fmt.Errorf("failed to marshal locator: %w", err)
 	}
-	return n, err
+	if err := backend.Upload(backupID+"/locator.json", bytes.NewReader(locatorJSON)); err != nil {
+		_ = spinner.Stop()
+		return "", fmt.Errorf("failed to upload locator: %w", err)
+	}
+
+	spinner.Success(fmt.Sprintf("Upload complete: %s (%d chunks, %d bytes)", backupID, len(metas), total))
+	return backupID, nil
 }

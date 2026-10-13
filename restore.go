@@ -2,6 +2,7 @@ package main
 
 import (
 	"path/filepath"
+	"time"
 
 	"github.com/pterm/pterm"
 
@@ -9,12 +10,16 @@ import (
 )
 
 type RestoreCmd struct {
-	UUID      string `arg:"" name:"uuid" help:"Backup UUID to restore."`
-	Identity  string `help:"Identity private key file (defaults to ~/.gloak/identity.txt)." short:"i"`
-	Remote    string `help:"Source Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:"" short:"R"`
-	OutputDir string `help:"Output directory for restored file." default:"./restored" short:"o"`
+	UUID       string `arg:"" name:"uuid" help:"Backup UUID to restore."`
+	Identity   string `help:"Identity private key file (defaults to ~/.gloak/identity.txt)." short:"i"`
+	Remote     string `help:"Source Rclone URI (e.g., keraaaki:backup_folder or /mnt/backups)." required:"" short:"R"`
+	OutputDir  string `help:"Output directory for restored file." default:"./restored" short:"o"`
+	PathFilter string `help:"Restore only this relative path (and children) from a tree snapshot."`
 }
 
+// Run restores the backup using the selected or default identity and sends an
+// optional completion notification. Restore errors are returned, and failed
+// restores may leave partial output.
 func (r *RestoreCmd) Run() error {
 	pterm.Info.Println("Starting RESTORE process...")
 
@@ -24,5 +29,18 @@ func (r *RestoreCmd) Run() error {
 		pterm.Info.Printf("Using identity from: %s\n", ident)
 	}
 
-	return flow.RunRestore(r.UUID, ident, r.Remote, r.OutputDir)
+	start := time.Now()
+	if err := flow.RunRestore(r.UUID, ident, r.Remote, r.OutputDir, r.PathFilter); err != nil {
+		return err
+	}
+	details := []string{
+		"Snapshot: " + r.UUID,
+		"Output: " + r.OutputDir,
+	}
+	if r.PathFilter != "" {
+		details = append(details, "Path filter: "+r.PathFilter)
+	}
+	details = append(details, "Duration: "+formatDuration(time.Since(start)))
+	notifyCommand("restore", details...)
+	return nil
 }
