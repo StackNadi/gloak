@@ -60,8 +60,8 @@ func runRestore(snapshotID, outputDir, identityPath string, backend storage.Back
 // runFileRestoreFromManifest writes a repository file snapshot under outputDir
 // and returns its path, truncating any existing file. It checks chunk plaintext
 // sizes and hashes and the overall payload hash. Invalid names or chunk paths,
-// filesystem, download, decryption, and integrity errors can leave partial output;
-// file close errors are ignored.
+// filesystem, download, decryption, integrity, and close errors can leave
+// partial output.
 func runFileRestoreFromManifest(manifest *core.Manifest, r *repo.Repo, backend storage.Backend, outputDir string) (string, error) {
 	if filepath.Base(manifest.OriginalName) != manifest.OriginalName {
 		return "", fmt.Errorf("invalid original filename in manifest: %s", manifest.OriginalName)
@@ -100,6 +100,9 @@ func runFileRestoreFromManifest(manifest *core.Manifest, r *repo.Repo, backend s
 
 	if hex.EncodeToString(payloadHasher.Sum(nil)) != manifest.PayloadSHA256 {
 		return "", fmt.Errorf("fatal: overall payload hash does not match manifest")
+	}
+	if err := outFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close output file: %w", err)
 	}
 	return outputPath, nil
 }
@@ -273,9 +276,9 @@ func rejectSymlinkRestorePath(destRoot, target string) error {
 // restoreTreeFile creates or truncates target, writes verified plaintext chunks,
 // and attempts to restore its modification time. An existing symlink at the
 // target is rejected. New files use entry.Mode's permission bits, subject to
-// the umask. Path, download, decryption, checksum, and file open/write errors
-// are returned and can leave a partial file. Invalid timestamps, timestamp
-// update failures, and close errors are ignored.
+// the umask. Path, download, decryption, checksum, file open/write, and close
+// errors are returned and can leave a partial file. Invalid timestamps and
+// timestamp update failures are ignored.
 func restoreTreeFile(entry core.TreeEntry, r *repo.Repo, backend storage.Backend, target string) error {
 	mode := os.FileMode(entry.Mode) & 0777
 	if fi, err := os.Lstat(target); err == nil && fi.Mode()&os.ModeSymlink != 0 {
@@ -313,6 +316,9 @@ func restoreTreeFile(entry core.TreeEntry, r *repo.Repo, backend storage.Backend
 		if _, err := outFile.Write(plain); err != nil {
 			return fmt.Errorf("failed to write chunk %d: %w", meta.Index, err)
 		}
+	}
+	if err := outFile.Close(); err != nil {
+		return fmt.Errorf("failed to close output file %s: %w", entry.RelPath, err)
 	}
 	// Re-applying the mode matters when the file already existed (a
 	// previous restore may have left it read-only or writable).

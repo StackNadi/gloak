@@ -24,7 +24,7 @@ const fileFormatVersion = "file-2"
 
 const masterKeySize = 32
 
-var fileChunkNameRe = regexp.MustCompile(`^chunk_\d{5}$`)
+var fileChunkNameRe = regexp.MustCompile(`^chunk_\d{5,}$`)
 
 type fileManifest struct {
 	Version       string           `json:"version"`
@@ -48,7 +48,7 @@ func fileChunkName(index int) string {
 	return fmt.Sprintf("chunk_%05d", index)
 }
 
-// validateFileChunkName accepts only relative chunk_NNNNN names.
+// validateFileChunkName accepts only chunk_ names with at least five digits.
 func validateFileChunkName(name string) error {
 	if !fileChunkNameRe.MatchString(name) {
 		return fmt.Errorf("invalid chunk name: %s", name)

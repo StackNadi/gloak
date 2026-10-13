@@ -89,7 +89,7 @@ gloak keeps the design narrow: age encryption, fixed-size chunks, chunk and payl
 | `gloak verify <backup-id> --remote <remote>` | Verify manifest, encrypted chunks, plaintext chunks, and payload hash. |
 | `gloak restore <backup-id> --remote <remote>` | Restore a verified backup to an output directory. |
 
-For command options, examples, storage layout, and troubleshooting, read [docs/GUIDE.md](docs/GUIDE.md).
+For command options, examples, storage layout, and troubleshooting, read [docs/WORKFLOW.md](docs/WORKFLOW.md).
 
 ---
 

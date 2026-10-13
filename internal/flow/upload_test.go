@@ -83,9 +83,14 @@ func TestFileChunkNameAndValidation(t *testing.T) {
 	if err := validateFileChunkName("chunk_00001"); err != nil {
 		t.Fatalf("valid name rejected: %v", err)
 	}
+	for _, name := range []string{"chunk_100000", "chunk_000001"} {
+		if err := validateFileChunkName(name); err != nil {
+			t.Fatalf("validateFileChunkName(%q) rejected: %v", name, err)
+		}
+	}
 	bad := []string{
 		"chunk_0000",
-		"chunk_000001",
+		"chunk_00000x",
 		"../evil",
 		"chunk_00000/../x",
 		"aaaa-bbbb-cccc-dddd-eeeeeeeeeeee/chunk_00000",

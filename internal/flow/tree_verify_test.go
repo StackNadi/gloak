@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"gloak/internal/core"
 )
 
 func TestRunVerifyTreeSnapshot(t *testing.T) {
@@ -29,6 +31,48 @@ func TestRunVerifyTreeCorruptChunk(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "CHUNK CORRUPT") {
 		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestRunVerifyTreeRejectsUnknownEntryType(t *testing.T) {
+	ident, backend, _ := repoFixture(t)
+	m := core.TreeManifest{
+		Version:   "2.0",
+		UUID:      "aaaaaaaa-bbbb-4ccc-8ddd-000000000040",
+		Kind:      core.KindTree,
+		CreatedAt: "2026-10-12T00:00:00Z",
+		Hostname:  "test",
+		Paths:     []string{"/tmp/x"},
+		Entries: []core.TreeEntry{
+			{RelPath: "weird", Type: "socket", Mode: 0644, Mtime: "2026-10-12T00:00:00Z"},
+		},
+	}
+	seedTreeSnapshot(t, backend, ident, m)
+
+	err := runVerify(m.UUID, ident, backend)
+	if err == nil || !strings.Contains(err.Error(), "unknown tree entry type") {
+		t.Fatalf("err = %v, want unknown entry type rejection", err)
+	}
+}
+
+func TestRunVerifyTreeRejectsUnsafeDirPath(t *testing.T) {
+	ident, backend, _ := repoFixture(t)
+	m := core.TreeManifest{
+		Version:   "2.0",
+		UUID:      "aaaaaaaa-bbbb-4ccc-8ddd-000000000041",
+		Kind:      core.KindTree,
+		CreatedAt: "2026-10-12T00:00:00Z",
+		Hostname:  "test",
+		Paths:     []string{"/tmp/x"},
+		Entries: []core.TreeEntry{
+			{RelPath: "../escape", Type: "dir", Mode: 0755, Mtime: "2026-10-12T00:00:00Z"},
+		},
+	}
+	seedTreeSnapshot(t, backend, ident, m)
+
+	err := runVerify(m.UUID, ident, backend)
+	if err == nil || !strings.Contains(err.Error(), "unsafe") {
+		t.Fatalf("err = %v, want unsafe path rejection", err)
 	}
 }
 

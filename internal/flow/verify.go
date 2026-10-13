@@ -86,38 +86,44 @@ func runFileVerifyFromManifest(manifest *core.Manifest, r *repo.Repo, backend st
 }
 
 // runTreeVerify verifies paths and encrypted and plaintext chunk sizes and
-// hashes for file entries, ignoring other entry types. It returns path,
-// download, decryption, and integrity errors without writing restored files.
+// hashes for file entries. Directory entries only have their paths checked.
+// Unknown entry types and unsafe paths are rejected the same way restore
+// rejects them. It returns path, download, decryption, and integrity errors
+// without writing restored files.
 func runTreeVerify(m *core.TreeManifest, r *repo.Repo, backend storage.Backend) error {
 	for _, entry := range m.Entries {
-		if entry.Type != "file" {
-			continue
-		}
 		if err := core.ValidateRelPath(entry.RelPath); err != nil {
 			return err
 		}
-		for _, meta := range entry.Chunks {
-			if err := validateChunkPath(meta.Name); err != nil {
-				return err
+		switch entry.Type {
+		case "file":
+			for _, meta := range entry.Chunks {
+				if err := validateChunkPath(meta.Name); err != nil {
+					return err
+				}
+				var buf bytes.Buffer
+				if err := backend.Download(meta.Name, &buf); err != nil {
+					return fmt.Errorf("CHUNK CORRUPT %d (%s): missing object: %w", meta.Index, meta.Name, err)
+				}
+				sealed := buf.Bytes()
+				if int64(len(sealed)) != meta.EncryptedSize {
+					return fmt.Errorf("CHUNK CORRUPT %d (%s): encrypted size mismatch", meta.Index, meta.Name)
+				}
+				if hashBytes(sealed) != meta.EncryptedSHA256 {
+					return fmt.Errorf("CHUNK CORRUPT %d (%s): encrypted sha256 mismatch", meta.Index, meta.Name)
+				}
+				plain, err := crypto.OpenChunk(r.MasterKey, meta.PlainSHA256, sealed)
+				if err != nil {
+					return fmt.Errorf("CHUNK CORRUPT %d (%s): %w", meta.Index, meta.Name, err)
+				}
+				if int64(len(plain)) != meta.PlainSize || hashBytes(plain) != meta.PlainSHA256 {
+					return fmt.Errorf("CHUNK CORRUPT %d (%s): plaintext mismatch", meta.Index, meta.Name)
+				}
 			}
-			var buf bytes.Buffer
-			if err := backend.Download(meta.Name, &buf); err != nil {
-				return fmt.Errorf("CHUNK CORRUPT %d (%s): missing object: %w", meta.Index, meta.Name, err)
-			}
-			sealed := buf.Bytes()
-			if int64(len(sealed)) != meta.EncryptedSize {
-				return fmt.Errorf("CHUNK CORRUPT %d (%s): encrypted size mismatch", meta.Index, meta.Name)
-			}
-			if hashBytes(sealed) != meta.EncryptedSHA256 {
-				return fmt.Errorf("CHUNK CORRUPT %d (%s): encrypted sha256 mismatch", meta.Index, meta.Name)
-			}
-			plain, err := crypto.OpenChunk(r.MasterKey, meta.PlainSHA256, sealed)
-			if err != nil {
-				return fmt.Errorf("CHUNK CORRUPT %d (%s): %w", meta.Index, meta.Name, err)
-			}
-			if int64(len(plain)) != meta.PlainSize || hashBytes(plain) != meta.PlainSHA256 {
-				return fmt.Errorf("CHUNK CORRUPT %d (%s): plaintext mismatch", meta.Index, meta.Name)
-			}
+		case "dir":
+			// Directories carry no chunks to verify.
+		default:
+			return fmt.Errorf("unknown tree entry type %q for %s", entry.Type, entry.RelPath)
 		}
 	}
 	return nil
