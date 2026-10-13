@@ -95,6 +95,8 @@ For command options, examples, storage layout, and troubleshooting, read [docs/G
 
 ## Storage shape
 
+An upload (`gloak upload`) writes one folder per backup:
+
 ```text
 /mnt/backups/
   {backup_id}/
@@ -105,7 +107,20 @@ For command options, examples, storage layout, and troubleshooting, read [docs/G
     chunk_00002
 ```
 
-`locator.json` is public and contains only the format version and backup ID. `manifest.age` is encrypted and contains the original filename, size, recipient, payload hash, and per-chunk hashes.
+`locator.json` is public and contains only the format version and backup ID. `manifest.age` is encrypted and contains the original filename, size, creation time, the master key, the payload hash, and per-chunk hashes.
+
+A repository (`gloak init` and `gloak backup`) keeps a content-addressed layout instead:
+
+```text
+/mnt/backups/
+  repo.json
+  keys/{fingerprint}.age
+  data/{ab}/{sha256}
+  snapshots/{uuid}.age
+  index/000001.age
+```
+
+`repo.json` is the public completion marker with the format version, creation time, recipient keys, and chunk size parameters. Each recipient gets one wrapped master key under `keys/`. Encrypted chunks live under `data/`, keyed by the plaintext hash of each chunk. Snapshot manifests are encrypted under `snapshots/`, and checkpoint files under `index/` record which chunks already exist so a re-run skips them.
 
 ---
 
