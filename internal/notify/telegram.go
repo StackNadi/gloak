@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // TelegramConfig holds Bot API credentials. Empty token disables notify.
@@ -74,11 +75,16 @@ func redact(msg, token string) string {
 	return strings.ReplaceAll(msg, token, "[redacted]")
 }
 
-// truncate limits s to n bytes, ending shortened text with "...". It may split
-// a UTF-8 sequence and requires n >= 3 when truncation is needed.
+// truncate limits s to n bytes, ending shortened text with "...". The cut
+// lands on a rune boundary so the result stays valid UTF-8, and n >= 3 is
+// required when truncation is needed.
 func truncate(s string, n int) string {
 	if len(s) <= n {
 		return s
 	}
-	return s[:n-3] + "..."
+	cut := n - 3
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	return s[:cut] + "..."
 }

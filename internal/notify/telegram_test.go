@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestSendDisabledNoops(t *testing.T) {
@@ -77,5 +78,24 @@ func TestSendRedactsTokenFromTransportError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "[redacted]") {
 		t.Fatalf("error = %v, want the token placeholder", err)
+	}
+}
+
+func TestTruncateKeepsUTF8(t *testing.T) {
+	// "€" occupies bytes 2-4; a plain byte cut at n-3 would land inside it.
+	s := "aa€" + strings.Repeat("b", 10)
+	got := truncate(s, 6)
+	if got != "aa..." {
+		t.Fatalf("truncate() = %q, want %q", got, "aa...")
+	}
+	if !utf8.ValidString(got) {
+		t.Fatalf("truncate() = %q is not valid UTF-8", got)
+	}
+}
+
+func TestTruncateShortInputUnchanged(t *testing.T) {
+	s := "aa€bb"
+	if got := truncate(s, len(s)); got != s {
+		t.Fatalf("truncate() = %q, want %q", got, s)
 	}
 }

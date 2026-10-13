@@ -39,7 +39,7 @@ func RunCheck(identityPath, remote string) error {
 	pterm.Printf("Referenced chunks: %d\n", res.Referenced)
 	pterm.Printf("Data objects: %d\n", res.DataObjects)
 	if len(res.Garbage) > 0 {
-		pterm.Warning.Printf("Garbage objects: %d (run prune in a later phase)\n", len(res.Garbage))
+		pterm.Warning.Printf("Garbage objects: %d (run `gloak prune --yes` to remove them)\n", len(res.Garbage))
 	}
 	return nil
 }

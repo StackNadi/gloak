@@ -79,8 +79,9 @@ func decodeFileMasterKey(m fileManifest) ([]byte, error) {
 // runFileRestore restores a standalone backup under outputDir and returns the
 // output path. It creates parent directories and truncates an existing output
 // file. Manifest, key, chunk path, download, decryption, checksum, and filesystem
-// errors are returned; a failure can leave a partial file. File close errors
-// are ignored.
+// errors are returned; a failure can leave a partial file. The success path
+// checks the output file's close error; close errors on failure paths are
+// ignored.
 func runFileRestore(backupID, identityPath, outputDir string, backend storage.Backend) (string, error) {
 	m, err := readFileManifest(backend, identityPath, backupID)
 	if err != nil {
@@ -125,6 +126,9 @@ func runFileRestore(backupID, identityPath, outputDir string, backend storage.Ba
 
 	if hex.EncodeToString(payloadHasher.Sum(nil)) != m.PayloadSHA256 {
 		return "", fmt.Errorf("fatal: overall payload hash does not match manifest")
+	}
+	if err := outFile.Close(); err != nil {
+		return "", fmt.Errorf("failed to close output file: %w", err)
 	}
 	return outputPath, nil
 }
