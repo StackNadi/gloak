@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -105,11 +106,17 @@ func runFileRestoreFromManifest(manifest *core.Manifest, r *repo.Repo, backend s
 
 // runTreeRestore restores entries below a root named for the first source
 // path, falling back to the snapshot UUID for an empty, . or root basename.
-// pathFilter selects an exact slash-separated path and its descendants; empty
-// selects all. It returns the destination root even when nothing matches.
-// Missing source paths, unsafe entry paths, unknown selected entry types, and
-// filesystem or chunk restore errors are returned; partial output remains.
+// pathFilter is cleaned and validated as a relative path first, then selects
+// an exact slash-separated path and its descendants; empty selects all.
+// It returns the destination root even when nothing matches.
+// Missing source paths, unsafe entry paths, invalid filters, unknown selected
+// entry types, and filesystem or chunk restore errors are returned; partial
+// output remains.
 func runTreeRestore(m *core.TreeManifest, r *repo.Repo, outputDir, pathFilter string, backend storage.Backend) (string, error) {
+	pathFilter, err := normalizePathFilter(pathFilter)
+	if err != nil {
+		return "", err
+	}
 	if len(m.Paths) == 0 {
 		return "", fmt.Errorf("tree snapshot has no source paths")
 	}
@@ -155,6 +162,11 @@ func runTreeRestore(m *core.TreeManifest, r *repo.Repo, outputDir, pathFilter st
 		// Defense in depth: ensure target stays under destRoot.
 		if !strings.HasPrefix(target, destRoot+string(filepath.Separator)) && target != destRoot {
 			return "", fmt.Errorf("restored path escapes output root: %s", entry.RelPath)
+		}
+		// The manifest is remote input: reject targets reached through a
+		// symlink below the destination root before creating or writing.
+		if err := rejectSymlinkRestorePath(destRoot, target); err != nil {
+			return "", err
 		}
 		switch entry.Type {
 		case "dir":
@@ -202,13 +214,73 @@ func runTreeRestore(m *core.TreeManifest, r *repo.Repo, outputDir, pathFilter st
 	return destRoot, nil
 }
 
+// normalizePathFilter cleans a user-supplied tree restore filter and validates
+// it as a relative path. Empty input stays empty and "." selects everything.
+// Filters that are unsafe after cleaning are rejected.
+func normalizePathFilter(pathFilter string) (string, error) {
+	if pathFilter == "" {
+		return "", nil
+	}
+	cleaned := path.Clean(filepath.ToSlash(pathFilter))
+	if cleaned == "." {
+		return "", nil
+	}
+	if err := core.ValidateRelPath(cleaned); err != nil {
+		return "", fmt.Errorf("invalid path filter: %w", err)
+	}
+	return cleaned, nil
+}
+
+// rejectSymlinkRestorePath returns an error when destRoot or any component of
+// target below it already exists as a symlink. A string check on the joined
+// path cannot see links planted under the destination, so every component is
+// inspected before restore creates or writes through it. Components that do
+// not exist yet are left for creation.
+func rejectSymlinkRestorePath(destRoot, target string) error {
+	inspect := func(p string) error {
+		fi, err := os.Lstat(p)
+		if err != nil {
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return fmt.Errorf("failed to inspect restore path %s: %w", p, err)
+		}
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("refusing to restore through symlink: %s", p)
+		}
+		return nil
+	}
+	if err := inspect(destRoot); err != nil {
+		return err
+	}
+	rel, err := filepath.Rel(destRoot, target)
+	if err != nil {
+		return fmt.Errorf("invalid restore path: %w", err)
+	}
+	cur := destRoot
+	for _, part := range strings.Split(rel, string(filepath.Separator)) {
+		if part == "." || part == "" {
+			continue
+		}
+		cur = filepath.Join(cur, part)
+		if err := inspect(cur); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 // restoreTreeFile creates or truncates target, writes verified plaintext chunks,
-// and attempts to restore its modification time. New files use entry.Mode's
-// permission bits, subject to the umask. Path, download, decryption, checksum,
-// and file open/write errors are returned and can leave a partial file.
-// Invalid timestamps, timestamp update failures, and close errors are ignored.
+// and attempts to restore its modification time. An existing symlink at the
+// target is rejected. New files use entry.Mode's permission bits, subject to
+// the umask. Path, download, decryption, checksum, and file open/write errors
+// are returned and can leave a partial file. Invalid timestamps, timestamp
+// update failures, and close errors are ignored.
 func restoreTreeFile(entry core.TreeEntry, r *repo.Repo, backend storage.Backend, target string) error {
 	mode := os.FileMode(entry.Mode) & 0777
+	if fi, err := os.Lstat(target); err == nil && fi.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("refusing to restore %s over a symlink", entry.RelPath)
+	}
 	outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, mode)
 	if err != nil {
 		// An earlier restore may have left the file read-only; make it

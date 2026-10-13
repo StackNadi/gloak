@@ -249,6 +249,171 @@ func TestRunTreeRestoreAppliesDirModesAfterChildren(t *testing.T) {
 	}
 }
 
+func TestNormalizePathFilter(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    string
+		wantErr bool
+	}{
+		{"", "", false},
+		{"sub", "sub", false},
+		{"sub/", "sub", false},
+		{"./sub", "sub", false},
+		{"sub//b.txt", "sub/b.txt", false},
+		{"sub/../sub", "sub", false},
+		{".", "", false},
+		{"..", "", true},
+		{"../x", "", true},
+		{"a/../../x", "", true},
+		{"/abs", "", true},
+		{`back\slash`, "", true},
+	}
+	for _, c := range cases {
+		got, err := normalizePathFilter(c.in)
+		if c.wantErr {
+			if err == nil {
+				t.Errorf("normalizePathFilter(%q) = %q, want error", c.in, got)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("normalizePathFilter(%q) error: %v", c.in, err)
+			continue
+		}
+		if got != c.want {
+			t.Errorf("normalizePathFilter(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+func TestRejectSymlinkRestorePath(t *testing.T) {
+	base := t.TempDir()
+	destRoot := filepath.Join(base, "dest")
+	// A destination root that does not exist yet is fine.
+	if err := rejectSymlinkRestorePath(destRoot, filepath.Join(destRoot, "a.txt")); err != nil {
+		t.Fatalf("missing destRoot: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(destRoot, "sub"), 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(destRoot, "a.txt"), []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := rejectSymlinkRestorePath(destRoot, filepath.Join(destRoot, "sub", "b.txt")); err != nil {
+		t.Fatalf("regular path: %v", err)
+	}
+	victim := filepath.Join(base, "victim.txt")
+	if err := os.WriteFile(victim, []byte("keep"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, filepath.Join(destRoot, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if err := rejectSymlinkRestorePath(destRoot, filepath.Join(destRoot, "link.txt")); err == nil ||
+		!strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("final component symlink: err = %v, want symlink rejection", err)
+	}
+	outside := filepath.Join(base, "outside")
+	if err := os.MkdirAll(outside, 0755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(destRoot, "evil")); err != nil {
+		t.Fatal(err)
+	}
+	if err := rejectSymlinkRestorePath(destRoot, filepath.Join(destRoot, "evil", "x.txt")); err == nil ||
+		!strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("intermediate symlink: err = %v, want symlink rejection", err)
+	}
+	linkRoot := filepath.Join(base, "linkroot")
+	if err := os.Symlink(outside, linkRoot); err != nil {
+		t.Fatal(err)
+	}
+	if err := rejectSymlinkRestorePath(linkRoot, filepath.Join(linkRoot, "x.txt")); err == nil ||
+		!strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("destRoot symlink: err = %v, want symlink rejection", err)
+	}
+}
+
+func TestRestoreTreeFileRejectsSymlinkTarget(t *testing.T) {
+	dir := t.TempDir()
+	victim := filepath.Join(dir, "victim.txt")
+	if err := os.WriteFile(victim, []byte("untouched"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(dir, "link.txt")
+	if err := os.Symlink(victim, link); err != nil {
+		t.Fatal(err)
+	}
+	entry := core.TreeEntry{RelPath: "link.txt", Type: "file", Mode: 0644}
+	// The symlink guard runs before any repo or backend access, so nil is safe.
+	err := restoreTreeFile(entry, nil, nil, link)
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("err = %v, want symlink rejection", err)
+	}
+}
+
+func TestRunTreeRestoreFilterNormalizesSlashes(t *testing.T) {
+	_, backend, ident, snap := treeFixture(t)
+	for _, filter := range []string{"sub/", "./sub"} {
+		out := t.TempDir()
+		got, err := runRestore(snap, out, ident, backend, filter)
+		if err != nil {
+			t.Fatalf("filter %q: %v", filter, err)
+		}
+		if _, err := os.Stat(filepath.Join(got, "a.txt")); err == nil {
+			t.Fatalf("filter %q: a.txt restored despite filter", filter)
+		}
+		b, err := os.ReadFile(filepath.Join(got, "sub", "b.txt"))
+		if err != nil || string(b) != "beta" {
+			t.Fatalf("filter %q: sub/b.txt = %q, err = %v", filter, b, err)
+		}
+	}
+}
+
+func TestRunTreeRestoreRejectsSymlinkTarget(t *testing.T) {
+	root, backend, ident, snap := treeFixture(t)
+	out := t.TempDir()
+	dest := filepath.Join(out, filepath.Base(root))
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		t.Fatal(err)
+	}
+	victim := filepath.Join(t.TempDir(), "victim.txt")
+	if err := os.WriteFile(victim, []byte("untouched"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(victim, filepath.Join(dest, "a.txt")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := runRestore(snap, out, ident, backend, "")
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("err = %v, want symlink rejection", err)
+	}
+	got, err := os.ReadFile(victim)
+	if err != nil || string(got) != "untouched" {
+		t.Fatalf("victim = %q, err = %v, want it untouched", got, err)
+	}
+}
+
+func TestRunTreeRestoreRejectsSymlinkDirectory(t *testing.T) {
+	root, backend, ident, snap := treeFixture(t)
+	out := t.TempDir()
+	dest := filepath.Join(out, filepath.Base(root))
+	if err := os.MkdirAll(dest, 0755); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.Symlink(outside, filepath.Join(dest, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := runRestore(snap, out, ident, backend, "")
+	if err == nil || !strings.Contains(err.Error(), "symlink") {
+		t.Fatalf("err = %v, want symlink rejection", err)
+	}
+	if _, err := os.Stat(filepath.Join(outside, "b.txt")); err == nil {
+		t.Fatal("restore escaped through a symlinked directory")
+	}
+}
+
 func seedTreeSnapshot(t *testing.T, backend *memtest.MemoryBackend, ident string, m core.TreeManifest) {
 	t.Helper()
 	r, err := repo.Open(backend, ident)
